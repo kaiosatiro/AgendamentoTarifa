@@ -64,8 +64,8 @@ def validaSizeTables(connection, cursor):
     return config_tarifa_size == agendamento_config_tarifa_size
 
 
-def pg_dump(host, user, port, dbname, password, file, workdir):
-    proc = Popen(['pg_dump', '--host', host, '-U', user, '-W', '--port', port,
+def pg_dump(host, user, port, dbname, file, workdir):
+    proc = Popen(['pg_dump', '--host', host, '-U', user, '--port', port,
      '--format', 'plain', '--verbose', '--file', str(file),
       '--table', 'public.agendamento_config_tarifa', dbname],
        cwd=workdir, shell=True, stdin=PIPE)
@@ -76,8 +76,8 @@ def checkarquivo(nomecaminho):
     pass
 
 
-def preparaTarifaNova(host, user, port, dbname, password, file, workdir):
-    connection = psycopg2.connect(f'host={host} dbname={dbname} user={user} password={password} ')
+def preparaTarifaNova(host, user, port, dbname, file, workdir):
+    connection = psycopg2.connect(f'host={host} dbname={dbname} user={user}')
     cursor = connection.cursor()
 
     criaTabelaAgendamento(connection, cursor)
@@ -85,7 +85,7 @@ def preparaTarifaNova(host, user, port, dbname, password, file, workdir):
     validaSizeTables(connection, cursor)
  
     connection.close()
-    pg_dump(host, user, port, dbname, password, file, workdir)
+    pg_dump(host, user, port, dbname, file, workdir)
     checkarquivo(file)
 
 
@@ -117,6 +117,11 @@ workdir = PurePath(psqldir)
 filename = 'TARIFA_NOVA'
 saveDir = Path(f"{Path.cwd()}/{filename}")
 file = PurePath(saveDir)
+pgpass = Path.home()/'AppData'/'Roaming'/'postgresql'/'pgpass.conf'
+                               
+with pgpass.open(mode='w') as arq:
+    arq.write(f'localhost:5432:*:postgres:{password}')
 
-preparaTarifaNova(host, user, port, dbname, password, file, workdir)
+preparaTarifaNova(host, user, port, dbname, file, workdir)
+pgpass.unlink()
 # input()

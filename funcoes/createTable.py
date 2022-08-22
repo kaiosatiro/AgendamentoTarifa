@@ -1,12 +1,13 @@
 import psycopg2
 
-host = '192.168.200.150'
+
+host = 'localhost'
 user = 'postgres'
 port = '5432'
 dbname = 'parkingplus'
-password = 'suporte@wps2018'
-
-connection = psycopg2.connect(f'host={host} dbname={dbname} user={user} password={password} ')
+password = 'postgres'
+#password={password}
+connection = psycopg2.connect(f'host={host} dbname={dbname} user={user}')
 cursor = connection.cursor()
 
 try:
@@ -24,5 +25,5 @@ try:
 except psycopg2.errors.DuplicateTable:
     connection.rollback()
     cursor.execute('TRUNCATE agendamento_config_tarifa')
-else:
+finally:
     connection.commit()

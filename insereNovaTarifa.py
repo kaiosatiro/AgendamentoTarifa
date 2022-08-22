@@ -4,7 +4,7 @@ import psycopg2
 
 
 def  backupConfigTarifa(host, user, port, dbname, password, backup, workdir):
-    proc = Popen(['pg_dump', '--host', host, '-U', user, '-W', '--port', port,
+    proc = Popen(['pg_dump', '--host', host, '-U', user, '--port', port,
      '--format', 'custom', '--verbose', '--file', str(backup),
       '--table', 'public.config_tarifa', dbname],
        cwd=workdir, shell=True, stdin=PIPE)

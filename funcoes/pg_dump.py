@@ -22,9 +22,9 @@ def pg_dump():
       '--table', 'public.agendamento_config_tarifa', dbname],
        cwd=workdir, shell=True, stdin=PIPE)
 
-    proc.stdin.write('postgres\n')
-    # return proc.communicate(bytes(password))
-    # proc.wait()
+    # proc.stdin.write('postgres\n')
+    # return proc.communicate()
+    proc.wait()
 
 pg_dump()
 # input()

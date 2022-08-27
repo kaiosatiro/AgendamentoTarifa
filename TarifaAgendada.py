@@ -5,7 +5,18 @@ import psycopg2
 
 
 def checkarquivo(nomecaminho):
-    pass
+    ...
+
+
+def salvaScript(host, user, port, dbname):
+    with open('atualizadorTarifa.bat', 'w') as bat:
+        bat.write(f"""
+@echo off
+::---------------------------------------------------
+::SCRIPT para rodar a atualização da tarifa
+::---------------------------------------------------
+python "%cd%\TarifaAgendada.py" --atualizar --host {host} --user {user} --port {port} --dbname {dbname}
+""")
 
 
 def validaSizeTables(connection, cursor):
@@ -57,12 +68,12 @@ def preparaTarifaNova(opcao, file, workdir):
     
     with pgpass.open(mode='a') as arq: arq.write(f'\n{host}:{port}:*:{user}:{password}')
     
-    connection = psycopg2.connect(f'host={host} dbname={dbname} user={user}')
-    cursor = connection.cursor()
+    with psycopg2.connect(f'host={host} dbname={dbname} user={user}') as connection:
+        cursor = connection.cursor()
+        criaTabelaAgendamento(connection, cursor)
+        validaSizeTables(connection, cursor)
+        # connection.close()
 
-    criaTabelaAgendamento(connection, cursor)
-    validaSizeTables(connection, cursor)
-    connection.close()
     pg_dump(host, user, port, dbname, file, workdir)
     checkarquivo(file)
 
@@ -89,12 +100,12 @@ def updateNovaTarifa(connection, cursor):
 def atualizacaoTarifa(host, user, port, dbname, pgpass, workdir, backup):
     #Backup de segurança #chkarqbkp
     backupConfigTarifa(host, user, port, dbname, backup, workdir)
-    connection = psycopg2.connect(f'host={host} dbname={dbname} user={user}')
-    cursor = connection.cursor()
-    #Sobe a nova tarifa no banco e valida o tamanho da tabelas
-    updateNovaTarifa(connection, cursor)
-    validaSizeTables(connection, cursor)
-    connection.close()
+    with psycopg2.connect(f'host={host} dbname={dbname} user={user}') as connection:
+        cursor = connection.cursor()
+        #Sobe a nova tarifa no banco e valida o tamanho da tabelas
+        updateNovaTarifa(connection, cursor)
+        validaSizeTables(connection, cursor)
+        # connection.close()
     pgpass.unlink()
 
 
@@ -128,25 +139,26 @@ def preparaAgendamento(opcao, file, workdir, backupname):
         host, user, port, dbname, password = 'localhost', 'postgres', '5432', 'parkingplus', input('PASSWORD: ')
     
     with pgpass.open(mode='w') as arq: arq.write(f'\n{host}:{port}:*:{user}:{password}')
-
-    #Backup de segurança #chkarqbkp
+    #Backup de segurança 
     backupConfigTarifa(host, user, port, dbname, backupname, workdir)
-
-    connection = psycopg2.connect(f'host={host} dbname={dbname} user={user}')
-    cursor = connection.cursor()
-    criaTabelaAgendamento(connection, cursor)
+    checkarquivo(backupname)
+    with psycopg2.connect(f'host={host} dbname={dbname} user={user}') as connection:
+        cursor = connection.cursor()
+        criaTabelaAgendamento(connection, cursor)
+        # connection.close()
     psqlRestoreAgendamento(host, user, dbname, port, file, workdir)
-    connection.close()
+    
+    salvaScript(host, user, port, dbname) # Salva o script a ser agendado
 
 
 # INICIO DO PROGRAMA ==============
 if __name__ == "__main__":
 
-    host = 'localhost'
-    user = 'postgres'
-    port = '5432'
-    dbname = 'parkingplus'
-    password = 'postgres'
+    # host = 'localhost'
+    # user = 'postgres'
+    # port = '5432'
+    # dbname = 'parkingplus'
+    # password = 'postgres'
 
     version = 8.4
     psqldir = Path(f"C:/Program Files (x86)/PostgreSQL/{version}/bin/")
@@ -164,10 +176,23 @@ if __name__ == "__main__":
     
 #== Parseamento de Argumentos da linha de comando !
     parser = ArgumentParser(description='trigger')
-    parser.add_argument('--atualizar', '-a', default=False)
+    group = parser.add_mutually_exclusive_group(required=False)
+    group.add_argument('--teste', '-T', action='store_true')
+    group.add_argument('--atualizar', action='store_true')
+    
+    parser.add_argument('--host', '-H', default='localhost')
+    parser.add_argument('--port', '-p', default='5432')
+    parser.add_argument('--user', '-U', default='postgres')
+    parser.add_argument('--dbname', '-db', default='parkingplus')
+    # parser.add_argument('--pgpass', '-pgp', default=pgpass)
+    # parser.add_argument('--workdir', '-wd', default=workdir)
+    # parser.add_argument('--backup', '-bkp', default=backup)
+
     args = parser.parse_args()
 
-    if args.atualizar: atualizacaoTarifa(host, user, port, dbname, pgpass, workdir, backup)
+
+    if args.atualizar: atualizacaoTarifa(args.host, args.user, args.port, args.dbname, pgpass, workdir, backup)
+    elif args.teste: print('TESTADO !')
     
     else:
         print("==== ESCOLHA A TAREFA ===========")

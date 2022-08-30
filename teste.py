@@ -1,28 +1,18 @@
-from argparse import ArgumentParser
+from pathlib import Path, PosixPath, PurePath
 
-parser = ArgumentParser(description='trigger')
-group = parser.add_mutually_exclusive_group(required=False)
-group.add_argument('--atualizar', action='store_true')
-group.add_argument('--teste', '-T', action='store_true')
-parser.add_argument('--host', '-H', default='localhost')
-parser.add_argument('--port', '-p', default='5432')
-parser.add_argument('--user', '-U', default='postgres')
-parser.add_argument('--dbname', '-db', default='parkingplus')
-# parser.add_argument('--pgpass', '-pgp', default=pgpass)
-# parser.add_argument('--workdir', '-wd', default=workdir)
-# parser.add_argument('--backup', '-bkp', default=backup)
+cwd = Path.cwd()
 
-args = parser.parse_args()
+filename = 'TARIFA_NOVA'
+backupname = 'BACKUP_SEGURANCA_TARIFA_ATUAL'
 
-if args.atualizar:
-    print('Atualizou')
-    print(args.atualizar)
-    print(args._get_kwargs())
-elif args.teste:
-    print('Testou')
-    print(args.teste)
-    print(args._get_kwargs())
-else:
-    print('menu')
+file = PurePath(f"{cwd}/{filename}")
+backup = PurePath(f"{cwd}/{backupname}")
 
-# host, user, port, dbname, pgpass, workdir, backup
+print(cwd)
+print(Path( __file__ ).absolute())
+print(file)
+print(backup)
+
+
+
+print()

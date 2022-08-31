@@ -11,15 +11,17 @@ def checkarquivo(nomecaminho):
 
 
 def salvaScript(host, user, port, dbname):
+    if OS == 'Linux':
+        arquivo = 'atualizadorTarifa.sh'
+        linha = f'#!/bin/sh -xe\npython3 {SCRIPTDIR} --atualizar --host {host} --user {user} --port {port} --dbname {dbname}'
+    elif OS == 'Windows':
+        arquivo = 'atualizadorTarifa.bat'
+        linha = f"python {SCRIPTDIR} --atualizar --host {host} --user {user} --port {port} --dbname {dbname}"
 
-    with open('atualizadorTarifa.bat', 'w') as bat:
-        bat.write(f"""
-@echo off
-python {SCRIPTDIR} --atualizar --host {host} --user {user} --port {port} --dbname {dbname}
-""")
+    with open(arquivo, 'w') as script: script.write(linha)
 
 
-def validaSizeTables(connection, cursor):
+def validaSizeTables(cursor):
     cursor.execute("""
     SELECT relation, total_size FROM 
         (SELECT relname AS "relation",
@@ -53,7 +55,7 @@ def pg_dump(host, user, port, dbname, file):
     proc = Popen(['pg_dump', '--host', host, '-U', user, '--port', port,
      '--format', 'plain', '--verbose', '--file', str(file),
       '--table', 'public.agendamento_config_tarifa', dbname],
-       CWD=PGWORKDIR, shell=True, stdin=PIPE)
+       cwd=PGWORKDIR, shell=True, stdin=PIPE)
     proc.wait()
 
 
@@ -70,12 +72,14 @@ def preparaTarifaNova(opcao):
         if opcao == 1: password = 'postgres'
         else: password = input('PASSWORD: ')
     
-    with PGPASS.open(mode='a') as arq: arq.write(f'\n{host}:{port}:*:{user}:{password}')
+    with PGPASS.open(mode='w') as arq:
+        arq.write(f'\n{host}:{port}:*:{user}:{password}')
+        if OS == 'Linux': Popen(['chmod', '0600', PGPASS])
     
     with psycopg2.connect(f'host={host} dbname={dbname} user={user}') as connection:
         cursor = connection.cursor()
         criaTabelaAgendamento(connection, cursor)
-        validaSizeTables(connection, cursor)
+        validaSizeTables(cursor)
         # connection.close()
 
     pg_dump(host, user, port, dbname, TARIFANOVA)
@@ -101,14 +105,14 @@ def updateTARIFANOVA(connection, cursor):
         return True
 
 
-def atualizacaoTarifa(host, user, port, dbname, PGPASS):
+def atualizacaoTarifa(host, user, port, dbname):
     #Backup de segurança #chkarqbkp
     backupConfigTarifa(host, user, port, dbname, BACKUPNAME)
     with psycopg2.connect(f'host={host} dbname={dbname} user={user}') as connection:
         cursor = connection.cursor()
         #Sobe a nova tarifa no banco e valida o tamanho da tabelas
         updateTARIFANOVA(connection, cursor)
-        validaSizeTables(connection, cursor)
+        validaSizeTables(cursor)
         # connection.close()
     PGPASS.unlink()
 
@@ -118,7 +122,7 @@ def  backupConfigTarifa(host, user, port, dbname, backupname):
     proc = Popen(['pg_dump', '--host', host, '-U', user, '--port', port,
      '--format', 'custom', '--verbose', '--file', str(backupname),
       '--table', 'public.config_tarifa', dbname],
-       CWD=PGWORKDIR, shell=True, stdin=PIPE)
+       cwd=PGWORKDIR, shell=True, stdin=PIPE)
     proc.wait()
 
 
@@ -126,11 +130,11 @@ def psqlRestoreAgendamento(host, user, dbname, port, file):
     # Truncate via psql
     truncate_proc = Popen(['psql', '-U', user, '-d', dbname, '-h', host, '-p', port,
     '-c', 'TRUNCATE agendamento_config_tarifa'],
-       CWD=PGWORKDIR, shell=True, stdin=PIPE)
+       cwd=PGWORKDIR, shell=True, stdin=PIPE)
     truncate_proc.wait()
 
     psqlrestore_proc = Popen(['psql', '-U', user, '-d', dbname, '-h', host, '-p', port, '<', str(file)],
-                            CWD=PGWORKDIR, shell=True, stdin=PIPE)
+                            cwd=PGWORKDIR, shell=True, stdin=PIPE)
     psqlrestore_proc.wait()
 
 
@@ -146,7 +150,10 @@ def preparaAgendamento(opcao):
         if opcao == 1: password = 'postgres'
         else: password = input('PASSWORD: ')
 
-    with PGPASS.open(mode='w') as arq: arq.write(f'\n{host}:{port}:*:{user}:{password}')
+    with PGPASS.open(mode='w') as arq: 
+        arq.write(f'\n{host}:{port}:*:{user}:{password}')
+        if OS == 'Linux': Popen(['chmod', '0600', PGPASS])
+        
     #Backup de segurança 
     backupConfigTarifa(host, user, port, dbname, BACKUPNAME)
     checkarquivo(BACKUPNAME)
@@ -175,6 +182,7 @@ if __name__ == "__main__":
         psqlUnixdir = Path(f"/bin/")
         PGWORKDIR = PurePath(psqlUnixdir)
         PGPASS = Path.home()/'.pgpass'
+        #chmod 0600 ~/.pgpass
     elif OS == 'Windows':
         psqlWindir = Path(f"C:/Program Files (x86)/PostgreSQL/8.4/bin/")
         PGWORKDIR = PurePath(psqlWindir)
@@ -209,5 +217,5 @@ if __name__ == "__main__":
             _b = input("    1 <---- Acesso Padrão\n    2 <---- Digitar\n    3 <---- Apenas Senha\n----> ")
             preparaAgendamento(_b)
         elif _a == '3':
-            print('TESTADO !')    
+            print('Função em desenvolvimento!')    
         

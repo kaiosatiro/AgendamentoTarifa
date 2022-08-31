@@ -1,18 +1,18 @@
+from subprocess import Popen, PIPE
 from pathlib import Path, PosixPath, PurePath
 
-cwd = Path.cwd()
+# cwd = Path.cwd()
+# host = 'localhost'
+# port = '5432'
+# user = 'postgres'
+# password = 'postgres'
 
-filename = 'TARIFA_NOVA'
-backupname = 'BACKUP_SEGURANCA_TARIFA_ATUAL'
+# PGPASS = Path.home()/'.pgpass'
 
-file = PurePath(f"{cwd}/{filename}")
-backup = PurePath(f"{cwd}/{backupname}")
+# with PGPASS.open(mode='w') as arq: 
+#     arq.write(f'\n{host}:{port}:*:{user}:{password}')
+#     Popen(['chmod', '0600', PGPASS])
 
-print(cwd)
-print(Path( __file__ ).absolute())
-print(file)
-print(backup)
-
-
-
-print()
+Popen(['psql', '-U', 'postgres', '-d', 'parkingplus', '-h', 'locahost', '-p', '5432',
+'-c', 'SELECT * FROM lor LIMIT 1;'],
+    cwd='/bin/', shell=True, stdin=PIPE)

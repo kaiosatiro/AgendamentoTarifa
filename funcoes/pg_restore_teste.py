@@ -1,12 +1,14 @@
 from subprocess import Popen, PIPE
 from pathlib import Path, PurePath
 
+
 def pg_restore():
-    version = 8.4
-    psqldir = Path(f"C:/Program Files (x86)/PostgreSQL/{version}/bin/")
+    psqldir = Path(f"/")
     workdir = PurePath(psqldir)
-    filename = 'agendamento_config_tarifa'
-    saveDir = Path(f"C:/Temp/{filename}")
+
+    filename = 'BACKUP_TARIFA_NOVA'
+    #saveDir = Path(f"/WPSBrasil/agendamento_tarifa/{filename}")
+    saveDir = Path(f"{Path.cwd()}/{filename}")
     file = PurePath(saveDir)
 
     host = 'localhost'
@@ -14,17 +16,14 @@ def pg_restore():
     port = '5432'
     dbname = 'parkingplus'
     password = 'postgres'
+    table = 'agendamento_config_tarifa'
 
     proc = Popen(['pg_restore', '--host', host, '--port', port, '--username', user, 
-        '--dbname', dbname, '--verbose', str(file)],
-       cwd=workdir, shell=True, stdin=PIPE)
-
-    # proc.stdin.write(f'{password}\n')
-    # return proc.communicate(bytes(password))
+        '--dbname', dbname, '--verbose', str(file)], stdin=PIPE)
     proc.wait()
 
 pg_restore()
-# input()
+
 
 
 

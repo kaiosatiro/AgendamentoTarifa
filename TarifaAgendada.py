@@ -8,18 +8,45 @@ import psycopg2
 
 #Script a ser executado pelo agendador de tarefas do sistema operacional
 def salvaScript(host, user, port, dbname):
-    if OS == 'Linux':
-        arquivo = 'atualizadorTarifa.sh'
-        linha = f'#!/bin/sh -xe\npython3 {SCRIPTDIR} --atualizar --host {host} --user {user} --port {port} --dbname {dbname}'
-    elif OS == 'Windows':
-        arquivo = 'atualizadorTarifa.bat'
-        linha = f"python {SCRIPTDIR} --atualizar --host {host} --user {user} --port {port} --dbname {dbname}"
+    windows = {
+        'nome': 'atualizadorTarifa.bat',
+        'script': f"python {SCRIPTDIR} --atualizar --host {host} --user {user} --port {port} --dbname {dbname}",
+        'nome2': 'atualizadorTarifaB.bat',
+        'script2': ''
+    }
+    linux = {
+        'nome': 'atualizadorTarifa.sh',
+        'scrip': f'#!/bin/sh -xe\npython3 {SCRIPTDIR} --atualizar --host {host} --user {user} --port {port} --dbname {dbname}',
+        'nome2': 'atualizadorTarifaB.bat',
+        'script2': ''
+    }
 
-    with open(arquivo, 'w') as script: script.write(linha)
-
+    print("\n===== SALVAR SCRIPT PARA ==========")
+    i = input("    1 <---- LINUX CentOS 7\n    2 <---- LINUX CentOS 5\n    3 <---- WINDOWS\n----> ")
+    if _a not in ('1', '2', '3'): input("Opção inválida!"), exit()
+    if i == '1':
+        arquivo = windows['nome']
+        script = windows['script']
+        arquivo2 = windows['nome2']
+        scriptIndependente = windows['script2']
+    elif i == '2':
+        arquivo == linux['nome']
+        script == linux['scrip']
+        arquivo2 = linux['nome2']
+        scriptIndependente = linux['script2']
+    elif i == '3':
+        arquivo = linux['nome']
+        script = linux['scrip']
+        arquivo2 = linux['nome2']
+        scriptIndependente = linux['script2']
+    
+    with open(arquivo, 'w') as arq: arq.write(script)
+    with open(arquivo2, 'w') as arq2: arq2.write(scriptIndependente)
+    #chmod
 
 #função que compara os tamanhos das tabelas, como um dispositivo de segurança
 def validaSizeTables(cursor):
+    #SELECT relation, total_size FROM ( SELECT relname AS "relation", pg_size_pretty (pg_total_relation_size (C.oid)) AS "total_size" FROM pg_class C LEFT JOIN pg_namespace N ON (N.oid = C.relnamespace) WHERE nspname NOT IN ('pg_catalog', 'information_schema') AND C.relkind <> 'i' AND nspname !~ '^pg_toast' ) AS tab WHERE relation LIKE '%config_tarifa%' ORDER BY relation
     cursor.execute("""
     SELECT relation, total_size FROM 
         (SELECT relname AS "relation",
@@ -39,6 +66,7 @@ def validaSizeTables(cursor):
 
 
 def criaTabelaAgendamento(connection, cursor):
+    #psql -U postgres -d parkingplus -c "DROP TABLE IF EXISTS agendamento_config_tarifa;CREATE TABLE agendamento_config_tarifa AS SELECT * FROM config_tarifa;"
     try:
         cursor.execute("CREATE TABLE agendamento_config_tarifa AS SELECT * FROM config_tarifa;")
     except psycopg2.errors.DuplicateTable:
@@ -51,28 +79,28 @@ def criaTabelaAgendamento(connection, cursor):
 
 #Funcoes PG_DUMP
 def dump(host, user, port, dbname, filename, type, tablename):
+    shl = False if OS == 'Linux' else True
     proc = Popen(['pg_dump', '--host', host, '-U', user, '--port', port,
      '--format', type, '--verbose', '--file', str(filename),
       '--table', tablename, dbname],
-       cwd=PGWORKDIR, shell=True, stdin=PIPE)
+       cwd=PGWORKDIR, shell=shl, stdin=PIPE)
     proc.wait()
 
 
 #Funcoes de RESTORE
 def restore(tipo, host, user, dbname, port, filename, table):
-    pg_restore = ['pg_restore', '--host', host, '--port', port, '--username', 
-                    user, '--dbname', dbname, '--verbose', str(filename)]
-    psql = ['psql', '-U', user, '-d', dbname, '-h', host, '-p', port, '<', str(filename)]
-
-    truncate = Popen(['psql', '-U', user, '-d', dbname, '-h', host, '-p', port,'-c', f'TRUNCATE {table}'],
-                    cwd=PGWORKDIR, shell=True, stdin=PIPE)
-    truncate.wait()
-
+    shl = False if OS == 'Linux' else True
     if tipo == 'pg_restore':
-        proc = Popen(pg_restore, cwd=PGWORKDIR, shell=True, stdin=PIPE)
+        proc = Popen(['pg_restore', '--clean', '--host', host, '--port', port, 
+        '--username', user, '--dbname', dbname, '--verbose', str(filename)],
+                    cwd=PGWORKDIR, shell=shl, stdin=PIPE)
         proc.wait()
     elif tipo == 'psql':
-        proc = Popen(psql, cwd=PGWORKDIR, shell=True, stdin=PIPE)
+        truncate = Popen(['psql', '-U', user, '-d', dbname, '-h', host, '-p', port,'-c', f'TRUNCATE {table}'],
+                    cwd=PGWORKDIR, shell=shl, stdin=PIPE)
+        truncate.wait()
+        proc = Popen(['psql', '-U', user, '-d', dbname, '-h', host, '-p', port, '<', str(filename)],
+                    cwd=PGWORKDIR, shell=shl, stdin=PIPE)
         proc.wait()
 
 
@@ -100,7 +128,7 @@ def preparaTarifaNova(opcao):
         validaSizeTables(cursor)
 
     tarifanovaName = PurePath(f"{CWD}/TARIFA_NOVA")
-    dump(host, user, port, dbname, tarifanovaName, 'plain', 'public.agendamento_config_tarifa')
+    dump(host, user, port, dbname, tarifanovaName, 'custom', 'public.agendamento_config_tarifa')
     if not Path(tarifanovaName).is_file():
         return print('FALSE')
     return print('True')
@@ -136,7 +164,7 @@ def preparaAgendamento(opcao):
 
     #Coloca a nova tarifa na tabela de agendamento
     tarifanovaName = PurePath(f"{CWD}/TARIFA_NOVA")
-    restore('psql', host, user, dbname, port, tarifanovaName, 'agendamento_config_tarifa')
+    restore('pg_restore', host, user, dbname, port, tarifanovaName, 'agendamento_config_tarifa')
     salvaScript(host, user, port, dbname) # Salva o script a ser executado
 
 
@@ -166,6 +194,47 @@ def atualizacaoTarifa(host, user, port, dbname):
             return True
 
 
+def testesdeAmbiente():
+    shl = False if OS == 'Linux' else True
+    #Testes de Postgres
+    try:
+        psql = Popen(['psql', '-V'], cwd='C:/Program Files (x86)/PostgreSQL/8.4/bin/', shell=shl)
+        psql.wait()
+        psql = psql.returncode == 0#Valida o teste
+    except NotADirectoryError:
+        psql = False
+    try:
+        pg_dump = Popen(['pg_dump', '-V'], cwd='C:/Program Files (x86)/PostgreSQL/8.4/bin/', shell=shl)
+        pg_dump.wait()
+        pg_dump = pg_dump.returncode == 0#Valida o teste
+    except NotADirectoryError:
+        pg_dump = False
+    try:
+        pg_restore = Popen(['pg_restore', '-V'], cwd='C:/Program Files (x86)/PostgreSQL/8.4/bin/', shell=shl)
+        pg_restore.wait()
+        pg_restore = pg_restore.returncode == 0#Valida o teste
+    except NotADirectoryError:
+        pgpass = False
+    #Testes de gravação
+    try:
+        with PGPASS.open(mode='w') as arq: 
+            arq.write(f'\n::*::')
+            pgpass =  Path(PGPASS).is_file()#Valida o teste
+        PGPASS.unlink()
+    except PermissionError:
+        pgpass = False#Valida o teste
+    
+    ok = '[ OK ]'
+    errpsql = "[ ERRO ] > binario não encontrado na pasta 'C:/Program Files (x86)/PostgreSQL/8.4/bin/'"
+    errgrav = '[ ERRO ] > Erro na gravação do arquivo. Execute em modo Admnistrador'
+
+    print('\n=========== TESTES ================')
+    print(f'Teste -- PSQL ------------ {ok if psql else errpsql}')
+    print(f'Teste -- PG_DUMP --------- {ok if pg_dump else errpsql}')
+    print(f'Teste -- PG_RESTORE------- {ok if pg_restore else errpsql}')
+    print(f'Teste -- GRAVACAO -------- {ok if pgpass else errgrav}')
+
+
 # INICIO DO PROGRAMA ==============
 if __name__ == "__main__":
 
@@ -181,6 +250,10 @@ if __name__ == "__main__":
 
     elif OS == 'Windows':
         psqlWindir = Path(f"C:/Program Files (x86)/PostgreSQL/8.4/bin/")
+        if not psqlWindir.is_dir():
+            print('Diretorio do PostgreSQL não encontrado')
+            input('C:/Program Files (x86)/PostgreSQL/8.4/bin/')
+            exit()
         PGWORKDIR = PurePath(psqlWindir)
         PGPASS = Path.home()/'AppData'/'Roaming'/'postgresql'/'pgpass.conf'    
 
@@ -200,8 +273,8 @@ if __name__ == "__main__":
     if args.atualizar:
         atualizacaoTarifa(args.host, args.user, args.port, args.dbname)
     elif args.teste:
-        print('TESTE (Em desenvolvimento) !')
-    
+        testesdeAmbiente()
+    # elif OS == 'Windows':
     else:
         print("\n==== ESCOLHA A TAREFA ===========")
         _a = input("    1 <---- Preparar Nova Tarifa\n    2 <---- Preparar Agendamento\n    3 <---- Testar\n----> ")
@@ -215,5 +288,4 @@ if __name__ == "__main__":
             _b = input("    1 <---- Acesso Padrão\n    2 <---- Digitar\n    3 <---- Apenas Senha\n----> ")
             preparaAgendamento(_b)
         elif _a == '3':
-            print('Função em desenvolvimento!')    
-        
+            testesdeAmbiente()

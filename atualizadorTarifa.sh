@@ -1,5 +1,5 @@
 #!/bin/sh -xe
-export PGPASSWORD=suporte@wps2018
+export PGPASSWORD=test
 USER='postgres'
 BANCO='parkingplus'
 SERVIDOR='localhost'

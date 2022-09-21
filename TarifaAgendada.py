@@ -7,44 +7,71 @@ import psycopg2
 
 
 #Script a ser executado pelo agendador de tarefas do sistema operacional
-def salvaScript(host, user, port, dbname):
+def salvaScript(host, user, port, dbname, password):
     windows = {
         'nome': 'atualizadorTarifa.bat',
-        'script': f"python {SCRIPTDIR} --atualizar --host {host} --user {user} --port {port} --dbname {dbname}",
-        'nome2': 'atualizadorTarifaB.bat',
-        'script2': ''
+        'script': f'''::Esse Script DEVE ser executado dentro da mesma pasta em que está o programa que o gerou.
+{SCRIPTDIR} --atualizar --host {host} --user {user} --port {port} --dbname {dbname}
+''' ,
+        'nome2': 'atualizadorTarifaIndependente.bat',
+        'script2': f'''::Esse Script PODE ser executado sozinho
+set PGPASSWORD=postgres
+cd {PGWORKDIR}
+psql -U {user} -d {dbname} -h {host} -p {port} -c "DROP TABLE IF EXISTS tarifa_backup;CREATE TABLE tarifa_backup AS SELECT * FROM config_tarifa;BEGIN TRANSACTION;TRUNCATE config_tarifa;INSERT INTO config_tarifa  SELECT * FROM agendamento_config_tarifa;COMMIT;"
+''' 
     }
     linux = {
         'nome': 'atualizadorTarifa.sh',
-        'scrip': f'#!/bin/sh -xe\npython3 {SCRIPTDIR} --atualizar --host {host} --user {user} --port {port} --dbname {dbname}',
-        'nome2': 'atualizadorTarifaB.bat',
-        'script2': ''
+        'script': f'''#!/bin/sh -xe
+#Esse Script DEVE ser executado dentro da mesma pasta em que está o programa que o gerou.
+python3 {SCRIPTDIR} --atualizar --host {host} --user {user} --port {port} --dbname {dbname}
+''',
+        'nomeOS5': 'atualizadorTarifaIndependente.sh',
+        'scriptOS5': f'''#!/bin/sh -xe
+#Esse Script PODE ser executado sozinho
+export PGPASSWORD={password}
+psql -U {user} -d {dbname} -h {host} -p {port} -c "DROP TABLE IF EXISTS tarifa_backup;CREATE TABLE tarifa_backup AS SELECT * FROM config_tarifa;BEGIN TRANSACTION;TRUNCATE config_tarifa;INSERT INTO config_tarifa  SELECT * FROM agendamento_config_tarifa;COMMIT;"
+''',
+        'nomeOS7': 'atualizadorTarifaIndependente.sh',
+        'scriptOS7': f'''#!/bin/sh -xe
+#Esse Script PODE ser executado sozinho
+export PGPASSWORD={password}
+docker exec -itd $(docker ps | grep db: | cut -d " " -f1) psql -U {user} -d {dbname} -h {host} -p {port} -c "DROP TABLE IF EXISTS tarifa_backup;CREATE TABLE tarifa_backup AS SELECT * FROM config_tarifa;BEGIN TRANSACTION;TRUNCATE config_tarifa;INSERT INTO config_tarifa  SELECT * FROM agendamento_config_tarifa;COMMIT;"
+''' 
     }
 
     print("\n===== SALVAR SCRIPT PARA ==========")
-    i = input("    1 <---- LINUX CentOS 7\n    2 <---- LINUX CentOS 5\n    3 <---- WINDOWS\n----> ")
-    if _a not in ('1', '2', '3'): input("Opção inválida!"), exit()
-    if i == '1':
-        arquivo = windows['nome']
-        script = windows['script']
-        arquivo2 = windows['nome2']
-        scriptIndependente = windows['script2']
-    elif i == '2':
-        arquivo == linux['nome']
-        script == linux['scrip']
-        arquivo2 = linux['nome2']
-        scriptIndependente = linux['script2']
-    elif i == '3':
-        arquivo = linux['nome']
-        script = linux['scrip']
-        arquivo2 = linux['nome2']
-        scriptIndependente = linux['script2']
-    
-    with open(arquivo, 'w') as arq: arq.write(script)
-    with open(arquivo2, 'w') as arq2: arq2.write(scriptIndependente)
-    #chmod
+    if OS == 'Windows':
+        i = input("    1 <---- LINUX CentOS 7\n    2 <---- LINUX CentOS 5\n    3 <---- WINDOWS\n----> ")
+        if i not in ('1', '2', '3'): input("Opção inválida!"), exit()
+        input('No Linux, LEMBRE-SE de executar o CHMOD no script')
+    elif OS == 'Linux':
+        i = input("    1 <---- LINUX CentOS 7\n    2 <---- LINUX CentOS 5\n----> ")
+        if i not in ('1', '2'): input("Opção inválida!"), exit()
+        input('LEMBRE-SE de executar o CHMOD no script')
 
-#função que compara os tamanhos das tabelas, como um dispositivo de segurança
+    if i == '1':
+        nomearq = linux['nomeOS7']
+        script = linux['scriptOS7']
+    elif i == '2':
+        nomearq == linux['nomeOS5']
+        script == linux['scriptOS5']
+    elif i == '3':
+        nomearq = windows['nome2']
+        script = windows['script2']
+
+    if OS == 'Linux':
+        nomearq2 = linux['nome']
+        script2 = linux['script']
+    elif OS == 'Windows':
+        nomearq2 = windows['nome']
+        script2 = windows['script']
+    
+    with open(nomearq, 'w') as arq: arq.write(script)
+    with open(nomearq2, 'w') as arq2: arq2.write(script2)
+    return True
+
+#Função que compara os tamanhos das tabelas, como um dispositivo de segurança
 def validaSizeTables(cursor):
     #SELECT relation, total_size FROM ( SELECT relname AS "relation", pg_size_pretty (pg_total_relation_size (C.oid)) AS "total_size" FROM pg_class C LEFT JOIN pg_namespace N ON (N.oid = C.relnamespace) WHERE nspname NOT IN ('pg_catalog', 'information_schema') AND C.relkind <> 'i' AND nspname !~ '^pg_toast' ) AS tab WHERE relation LIKE '%config_tarifa%' ORDER BY relation
     cursor.execute("""
@@ -68,7 +95,7 @@ def validaSizeTables(cursor):
 def criaTabelaAgendamento(connection, cursor):
     #psql -U postgres -d parkingplus -c "DROP TABLE IF EXISTS agendamento_config_tarifa;CREATE TABLE agendamento_config_tarifa AS SELECT * FROM config_tarifa;"
     try:
-        cursor.execute("CREATE TABLE agendamento_config_tarifa AS SELECT * FROM config_tarifa;")
+        cursor.execute("DROP TABLE IF EXISTS agendamento_config_tarifa;CREATE TABLE agendamento_config_tarifa AS SELECT * FROM config_tarifa;")
     except psycopg2.errors.DuplicateTable:
         connection.rollback()
         cursor.execute("TRUNCATE agendamento_config_tarifa; INSERT INTO agendamento_config_tarifa SELECT * FROM config_tarifa;")
@@ -119,19 +146,17 @@ def preparaTarifaNova(opcao):
         else: password = input('PASSWORD: ')
     
     with PGPASS.open(mode='w') as arq:
-        arq.write(f'\n{host}:{port}:*:{user}:{password}')
-        if OS == 'Linux': Popen(['chmod', '0600', PGPASS])
+        arq.write(f'\n{host}:{port}:*:{user}:{password}')# IMPORTANTE LOG ***
+        if OS == 'Linux': Popen(['chmod', '0600', PGPASS])# IMPORTANTE LOG ***
     
     with psycopg2.connect(f'host={host} dbname={dbname} user={user}') as connection:
         cursor = connection.cursor()
-        criaTabelaAgendamento(connection, cursor)
-        validaSizeTables(cursor)
+        criaTabelaAgendamento(connection, cursor)# IMPORTANTE LOG ***
+        validaSizeTables(cursor)# IMPORTANTE LOG ***
 
     tarifanovaName = PurePath(f"{CWD}/TARIFA_NOVA")
-    dump(host, user, port, dbname, tarifanovaName, 'custom', 'public.agendamento_config_tarifa')
-    if not Path(tarifanovaName).is_file():
-        return print('FALSE')
-    return print('True')
+    dump(host, user, port, dbname, tarifanovaName, 'custom', 'public.agendamento_config_tarifa') # IMPORTANTE LOG ***
+
 
 
 # TAREFA QUE PREPARA O AGENDAMENTO DA NOVA TARIFA =======================================
@@ -149,14 +174,15 @@ def preparaAgendamento(opcao):
         else: password = input('PASSWORD: ')
 
     with PGPASS.open(mode='w') as arq: 
-        arq.write(f'\n{host}:{port}:*:{user}:{password}')# IMPORTANTE TRATATIVA DE ERRO ***
-        if OS == 'Linux': Popen(['chmod', '0600', PGPASS])# IMPORTANTE TRATATIVA DE ERRO ***
+        arq.write(f'\n{host}:{port}:*:{user}:{password}')# IMPORTANTE LOG E TRATATIVA DE ERRO ***
+        if OS == 'Linux': Popen(['chmod', '0600', PGPASS])# IMPORTANTE LOG E TRATATIVA DE ERRO ***
         
     #Backup de segurança
     backupname = PurePath(f"{CWD}/BACKUP_SEGURANCA_TARIFA_{DATE}")
-    dump(host, user, port, dbname, backupname, 'custom', 'public.config_tarifa')
+    dump(host, user, port, dbname, backupname, 'custom', 'public.config_tarifa')# IMPORTANTE LOG E TRATATIVA DE ERRO ***
     if not Path(backupname).is_file():
         return False
+
     #Criacao da tabela
     with psycopg2.connect(f'host={host} dbname={dbname} user={user}') as connection:
         cursor = connection.cursor()
@@ -164,22 +190,28 @@ def preparaAgendamento(opcao):
 
     #Coloca a nova tarifa na tabela de agendamento
     tarifanovaName = PurePath(f"{CWD}/TARIFA_NOVA")
-    restore('pg_restore', host, user, dbname, port, tarifanovaName, 'agendamento_config_tarifa')
-    salvaScript(host, user, port, dbname) # Salva o script a ser executado
+    restore('pg_restore', host, user, dbname, port, tarifanovaName, 'agendamento_config_tarifa')# IMPORTANTE LOG E TRATATIVA DE ERRO ***
+    #Salva o script a ser executado
+    salvaScript(host, user, port, dbname, password)
+
+    i = input('EXCLUIR o arquivo PGPASS ?? (Y)')
+    if i in ('Y', 'y'):
+        PGPASS.unlink()
+    
 
 
 # TAREFA QUE SOBE A NOVA TARIFA NA TABELA =============== **IMPORTANTE** ================
 def atualizacaoTarifa(host, user, port, dbname):
     #Backup de segurança e checagem de arquivo
     backupname = PurePath(f"{CWD}/BACKUP_SEGURANCA_TARIFA_{DATE}")
-    dump(host, user, port, dbname, backupname, 'custom', 'public.config_tarifa')
+    dump(host, user, port, dbname, backupname, 'custom', 'public.config_tarifa')# IMPORTANTE LOG ***
     if not Path(backupname).is_file():
         return False
     #Atualizacao ta tarifa
     with psycopg2.connect(f'host={host} dbname={dbname} user={user}') as connection:
         cursor = connection.cursor()
         try:
-            cursor.execute("TRUNCATE config_tarifa; INSERT INTO config_tarifa SELECT * FROM agendamento_config_tarifa;")
+            cursor.execute("DROP TABLE IF EXISTS tarifa_backup;CREATE TABLE tarifa_backup AS SELECT * FROM config_tarifa;BEGIN TRANSACTION;TRUNCATE config_tarifa;INSERT INTO config_tarifa  SELECT * FROM agendamento_config_tarifa;COMMIT;")
         except psycopg2.errors.OperationalError:
             connection.rollback()
             return False
@@ -198,19 +230,19 @@ def testesdeAmbiente():
     shl = False if OS == 'Linux' else True
     #Testes de Postgres
     try:
-        psql = Popen(['psql', '-V'], cwd='C:/Program Files (x86)/PostgreSQL/8.4/bin/', shell=shl)
+        psql = Popen(['psql', '-V'], cwd=PGWORKDIR, shell=shl)
         psql.wait()
         psql = psql.returncode == 0#Valida o teste
     except NotADirectoryError:
         psql = False
     try:
-        pg_dump = Popen(['pg_dump', '-V'], cwd='C:/Program Files (x86)/PostgreSQL/8.4/bin/', shell=shl)
+        pg_dump = Popen(['pg_dump', '-V'], cwd=PGWORKDIR, shell=shl)
         pg_dump.wait()
         pg_dump = pg_dump.returncode == 0#Valida o teste
     except NotADirectoryError:
         pg_dump = False
     try:
-        pg_restore = Popen(['pg_restore', '-V'], cwd='C:/Program Files (x86)/PostgreSQL/8.4/bin/', shell=shl)
+        pg_restore = Popen(['pg_restore', '-V'], cwd=PGWORKDIR, shell=shl)
         pg_restore.wait()
         pg_restore = pg_restore.returncode == 0#Valida o teste
     except NotADirectoryError:
@@ -225,8 +257,11 @@ def testesdeAmbiente():
         pgpass = False#Valida o teste
     
     ok = '[ OK ]'
-    errpsql = "[ ERRO ] > binario não encontrado na pasta 'C:/Program Files (x86)/PostgreSQL/8.4/bin/'"
-    errgrav = '[ ERRO ] > Erro na gravação do arquivo. Execute em modo Admnistrador'
+    errgrav = '[ ERRO ] > Erro na gravação do arquivo. Execute como Admnistrador'
+    if OS == 'Linux':
+        errpsql = "[ ERRO ] > binario não encontrado na pasta"
+    elif OS == 'Windows':
+        errpsql = "[ ERRO ] > binario não encontrado na pasta 'C:/Program Files (x86)/PostgreSQL/8.4/bin/'"
 
     print('\n=========== TESTES ================')
     print(f'Teste -- PSQL ------------ {ok if psql else errpsql}')

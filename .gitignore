@@ -4,4 +4,3 @@ BACKUP_SEGURANCA_TARIFA_ATUAL
 TARIFA_NOVA
 *.txt
 del.py
-*.bat

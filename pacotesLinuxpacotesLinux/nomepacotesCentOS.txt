@@ -1,0 +1,9 @@
+postgresql-9.2.24-8.el7_9.i686
+postgresql-9.2.24-8.el7_9.x86_64
+postgresql-devel-9.2.24-8.el7_9.i686
+postgresql-devel-9.2.24-8.el7_9.x86_64
+postgresql-libs-9.2.24-8.el7_9.i686
+postgresql-libs-9.2.24-8.el7_9.x86_64
+python3-3.6.8-18.el7.i686
+python3-3.6.8-18.el7.x86_64
+python3-psycopg2-2.7.7-2.el7.x86_64

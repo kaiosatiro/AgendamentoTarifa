@@ -304,7 +304,7 @@ def testesdeAmbiente():
     print(f'Teste -- GRAVACAO -------- {ok if pgpass else errgrav}')
 
 
-# INICIO DO PROGRAMA ==============
+#=== INICIO DO PROGRAMA ==============
 if __name__ == "__main__":
 
     OS = system()

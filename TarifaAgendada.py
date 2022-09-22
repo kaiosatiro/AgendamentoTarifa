@@ -8,39 +8,43 @@ import psycopg2
 
 #Script a ser executado pelo agendador de tarefas do sistema operacional
 def salvaScript(host, user, port, dbname, password):
+    #Scripts para windows
     windows = {
-        'nome': 'atualizadorTarifa.bat',
+        'nome': 'ScriptAtualizaTarifa.bat',
         'script': f'''::Esse Script DEVE ser executado dentro da mesma pasta em que está o programa que o gerou.
 {SCRIPTDIR} --atualizar --host {host} --user {user} --port {port} --dbname {dbname}
 ''' ,
-        'nome2': 'atualizadorTarifaIndependente.bat',
+        'nome2': 'ScriptAtualizaTarifaSOLO.bat',
         'script2': f'''::Esse Script PODE ser executado sozinho
-set PGPASSWORD=postgres
+set PGPASSWORD={password}
+set cwd=%~dp0
 cd {PGWORKDIR}
-psql -U {user} -d {dbname} -h {host} -p {port} -c "DROP TABLE IF EXISTS tarifa_backup;CREATE TABLE tarifa_backup AS SELECT * FROM config_tarifa;BEGIN TRANSACTION;TRUNCATE config_tarifa;INSERT INTO config_tarifa  SELECT * FROM agendamento_config_tarifa;COMMIT;"
+psql -U {user} -d {dbname} -h {host} -p {port} -c "DROP TABLE IF EXISTS tarifa_backup;CREATE TABLE tarifa_backup AS SELECT * FROM config_tarifa;BEGIN TRANSACTION;TRUNCATE config_tarifa;INSERT INTO config_tarifa  SELECT * FROM agendamento_config_tarifa;COMMIT;" >> %cwd%\ScriptAtualizaTarifaLOG.log 2>&1
 ''' 
     }
+    #Scripts para Linux
     linux = {
-        'nome': 'atualizadorTarifa.sh',
+        'nome': 'ScriptAtualizaTarifa.sh',
         'script': f'''#!/bin/sh -xe
 #Esse Script DEVE ser executado dentro da mesma pasta em que está o programa que o gerou.
 python3 {SCRIPTDIR} --atualizar --host {host} --user {user} --port {port} --dbname {dbname}
 ''',
-        'nomeOS5': 'atualizadorTarifaIndependente.sh',
+        'nomeOS5': 'ScriptAtualizaTarifaCentOS5.sh',
         'scriptOS5': f'''#!/bin/sh -xe
 #Esse Script PODE ser executado sozinho
 export PGPASSWORD={password}
-psql -U {user} -d {dbname} -h {host} -p {port} -c "DROP TABLE IF EXISTS tarifa_backup;CREATE TABLE tarifa_backup AS SELECT * FROM config_tarifa;BEGIN TRANSACTION;TRUNCATE config_tarifa;INSERT INTO config_tarifa  SELECT * FROM agendamento_config_tarifa;COMMIT;"
+psql -U {user} -d {dbname} -h {host} -p {port} -c "DROP TABLE IF EXISTS tarifa_backup;CREATE TABLE tarifa_backup AS SELECT * FROM config_tarifa;BEGIN TRANSACTION;TRUNCATE config_tarifa;INSERT INTO config_tarifa  SELECT * FROM agendamento_config_tarifa;COMMIT;" >> /WPSBrasil/agendamento_tarifa/ScriptAtualizaTarifaLOG.log 2>&1
 ''',
-        'nomeOS7': 'atualizadorTarifaIndependente.sh',
+        'nomeOS7': 'ScriptAtualizaTarifaCentOS7.sh',
         'scriptOS7': f'''#!/bin/sh -xe
 #Esse Script PODE ser executado sozinho
 export PGPASSWORD={password}
-docker exec -itd $(docker ps | grep db: | cut -d " " -f1) psql -U {user} -d {dbname} -h {host} -p {port} -c "DROP TABLE IF EXISTS tarifa_backup;CREATE TABLE tarifa_backup AS SELECT * FROM config_tarifa;BEGIN TRANSACTION;TRUNCATE config_tarifa;INSERT INTO config_tarifa  SELECT * FROM agendamento_config_tarifa;COMMIT;"
+docker exec -itd $(docker ps | grep db: | cut -d " " -f1) psql -U {user} -d {dbname} -h {host} -p {port} -c "DROP TABLE IF EXISTS tarifa_backup;CREATE TABLE tarifa_backup AS SELECT * FROM config_tarifa;BEGIN TRANSACTION;TRUNCATE config_tarifa;INSERT INTO config_tarifa  SELECT * FROM agendamento_config_tarifa;COMMIT;" >> /WPSBrasil/agendamento_tarifa/ScriptAtualizaTarifaLOG.log 2>&1
 ''' 
     }
 
     print("\n===== SALVAR SCRIPT PARA ==========")
+    #Fonece as opções de acordo com o sistema operacional
     if OS == 'Windows':
         i = input("    1 <---- LINUX CentOS 7\n    2 <---- LINUX CentOS 5\n    3 <---- WINDOWS\n----> ")
         if i not in ('1', '2', '3'): input("Opção inválida!"), exit()
@@ -67,9 +71,11 @@ docker exec -itd $(docker ps | grep db: | cut -d " " -f1) psql -U {user} -d {dbn
         nomearq2 = windows['nome']
         script2 = windows['script']
     
+    #Grava os scripts
     with open(nomearq, 'w') as arq: arq.write(script)
     with open(nomearq2, 'w') as arq2: arq2.write(script2)
     return True
+
 
 #Função que compara os tamanhos das tabelas, como um dispositivo de segurança
 def validaSizeTables(cursor):
@@ -96,27 +102,35 @@ def criaTabelaAgendamento(connection, cursor):
     #psql -U postgres -d parkingplus -c "DROP TABLE IF EXISTS agendamento_config_tarifa;CREATE TABLE agendamento_config_tarifa AS SELECT * FROM config_tarifa;"
     try:
         cursor.execute("DROP TABLE IF EXISTS agendamento_config_tarifa;CREATE TABLE agendamento_config_tarifa AS SELECT * FROM config_tarifa;")
-    except psycopg2.errors.DuplicateTable:
+    except psycopg2.errors.OperationalError:
         connection.rollback()
-        cursor.execute("TRUNCATE agendamento_config_tarifa; INSERT INTO agendamento_config_tarifa SELECT * FROM config_tarifa;")
-    finally:
+        return False, 'Psycopg ERRO Operacional na criação da tabela'
+    except psycopg2.DatabaseError:
+        connection.rollback()
+        return False, 'Psycopg ERRO Banco de Dados na criação da tabela'
+    else:
         connection.commit()
-        return True
+        if not validaSizeTables(cursor):
+            return False, 'ERRO, desigualdade na comparação do tamanho das tabelas'
+        return True, 'OK'
 
 
 #Funcoes PG_DUMP
 def dump(host, user, port, dbname, filename, type, tablename):
     shl = False if OS == 'Linux' else True
+
     proc = Popen(['pg_dump', '--host', host, '-U', user, '--port', port,
      '--format', type, '--verbose', '--file', str(filename),
       '--table', tablename, dbname],
        cwd=PGWORKDIR, shell=shl, stdin=PIPE)
     proc.wait()
+    return proc.returncode == 0
 
 
 #Funcoes de RESTORE
 def restore(tipo, host, user, dbname, port, filename, table):
     shl = False if OS == 'Linux' else True
+
     if tipo == 'pg_restore':
         proc = Popen(['pg_restore', '--clean', '--host', host, '--port', port, 
         '--username', user, '--dbname', dbname, '--verbose', str(filename)],
@@ -129,10 +143,12 @@ def restore(tipo, host, user, dbname, port, filename, table):
         proc = Popen(['psql', '-U', user, '-d', dbname, '-h', host, '-p', port, '<', str(filename)],
                     cwd=PGWORKDIR, shell=shl, stdin=PIPE)
         proc.wait()
+    return proc.returncode == 0
 
 
 # TAREFA QUE REALIZA O DUMP DA TARIFA ALTERADA ==========================================
 def preparaTarifaNova(opcao):
+    #Recebe os parametros do Banco
     if _a not in ('1', '2', '3'): input("Opção inválida!"), exit()
     if opcao == '2':
         host = input('HOST: ')
@@ -145,22 +161,29 @@ def preparaTarifaNova(opcao):
         if opcao == '1': password = 'postgres'
         else: password = input('PASSWORD: ')
     
+    #Escreve o arquivo pgpass
     with PGPASS.open(mode='w') as arq:
         arq.write(f'\n{host}:{port}:*:{user}:{password}')# IMPORTANTE LOG ***
         if OS == 'Linux': Popen(['chmod', '0600', PGPASS])# IMPORTANTE LOG ***
     
+    #Cria a tabela agendamento e verifica a igualdade dos tamanhos
     with psycopg2.connect(f'host={host} dbname={dbname} user={user}') as connection:
         cursor = connection.cursor()
-        criaTabelaAgendamento(connection, cursor)# IMPORTANTE LOG ***
-        validaSizeTables(cursor)# IMPORTANTE LOG ***
+        retorno = criaTabelaAgendamento(connection, cursor)# IMPORTANTE LOG ***
+        if not retorno[0]:
+            return retorno
 
+    #Realiza o DUMP da tarifa a ser carregada no cliente
     tarifanovaName = PurePath(f"{CWD}/TARIFA_NOVA")
-    dump(host, user, port, dbname, tarifanovaName, 'custom', 'public.agendamento_config_tarifa') # IMPORTANTE LOG ***
-
+    retorno = dump(host, user, port, dbname, tarifanovaName, 'custom', 'public.agendamento_config_tarifa') # IMPORTANTE LOG ***
+    if not retorno:
+        return False, 'ERRO no dump da tabela'
+    return True, 'Concluido'
 
 
 # TAREFA QUE PREPARA O AGENDAMENTO DA NOVA TARIFA =======================================
 def preparaAgendamento(opcao):
+    #Recebe os parametros do Banco
     if _a not in ('1', '2', '3'): input("Opção inválida!"), exit()
     if opcao == '2':
         host = input('HOST: ')
@@ -173,40 +196,51 @@ def preparaAgendamento(opcao):
         if opcao == '1': password = 'postgres'
         else: password = input('PASSWORD: ')
 
+    #Escreve o arquivo pgpass
     with PGPASS.open(mode='w') as arq: 
-        arq.write(f'\n{host}:{port}:*:{user}:{password}')# IMPORTANTE LOG E TRATATIVA DE ERRO ***
-        if OS == 'Linux': Popen(['chmod', '0600', PGPASS])# IMPORTANTE LOG E TRATATIVA DE ERRO ***
-        
+        arq.write(f'\n{host}:{port}:*:{user}:{password}')# IMPORTANTE LOG ***
+        if OS == 'Linux': Popen(['chmod', '0600', PGPASS])# IMPORTANTE LOG  ***
+
     #Backup de segurança
     backupname = PurePath(f"{CWD}/BACKUP_SEGURANCA_TARIFA_{DATE}")
-    dump(host, user, port, dbname, backupname, 'custom', 'public.config_tarifa')# IMPORTANTE LOG E TRATATIVA DE ERRO ***
-    if not Path(backupname).is_file():
-        return False
+    retorno = dump(host, user, port, dbname, backupname, 'custom', 'public.config_tarifa')# IMPORTANTE LOG ***
+    if not retorno:
+        return False, 'ERRO no dump do BACKUP'
 
     #Criacao da tabela
     with psycopg2.connect(f'host={host} dbname={dbname} user={user}') as connection:
         cursor = connection.cursor()
-        criaTabelaAgendamento(connection, cursor)
+        retorno = criaTabelaAgendamento(connection, cursor)
+        if not retorno[0]:
+            return retorno
 
-    #Coloca a nova tarifa na tabela de agendamento
+    #Carrega a nova tarifa na tabela de agendamento
     tarifanovaName = PurePath(f"{CWD}/TARIFA_NOVA")
-    restore('pg_restore', host, user, dbname, port, tarifanovaName, 'agendamento_config_tarifa')# IMPORTANTE LOG E TRATATIVA DE ERRO ***
+    retorno = restore('pg_restore', host, user, dbname, port, tarifanovaName, 'agendamento_config_tarifa')# IMPORTANTE LOG ***
+    if not retorno:
+        return False, 'ERRO no carregamento da tarifa nova!' 
+   
     #Salva o script a ser executado
     salvaScript(host, user, port, dbname, password)
 
-    i = input('EXCLUIR o arquivo PGPASS ?? (Y)')
-    if i in ('Y', 'y'):
+    i = input('MANTER o arquivo PGPASS ?? (Y/y)\n>>>')
+    if i not in ('Y', 'y'):
         PGPASS.unlink()
-    
+        print('PGPASS Excluído!')
+
+    return True, 'Carregamento da nova tarifa Concluido!'
 
 
 # TAREFA QUE SOBE A NOVA TARIFA NA TABELA =============== **IMPORTANTE** ================
 def atualizacaoTarifa(host, user, port, dbname):
-    #Backup de segurança e checagem de arquivo
+    #Backup de segurança e checagem da arquivo de backup
     backupname = PurePath(f"{CWD}/BACKUP_SEGURANCA_TARIFA_{DATE}")
-    dump(host, user, port, dbname, backupname, 'custom', 'public.config_tarifa')# IMPORTANTE LOG ***
+    retorno = dump(host, user, port, dbname, backupname, 'custom', 'public.config_tarifa')# IMPORTANTE LOG ***
+    if not retorno:
+        return False, 'FALHA no dump do backup'
     if not Path(backupname).is_file():
-        return False
+        return False, 'FALHA, backup não encontrado antes da tarefa'
+
     #Atualizacao ta tarifa
     with psycopg2.connect(f'host={host} dbname={dbname} user={user}') as connection:
         cursor = connection.cursor()
@@ -214,16 +248,16 @@ def atualizacaoTarifa(host, user, port, dbname):
             cursor.execute("DROP TABLE IF EXISTS tarifa_backup;CREATE TABLE tarifa_backup AS SELECT * FROM config_tarifa;BEGIN TRANSACTION;TRUNCATE config_tarifa;INSERT INTO config_tarifa  SELECT * FROM agendamento_config_tarifa;COMMIT;")
         except psycopg2.errors.OperationalError:
             connection.rollback()
-            return False
+            return False, backupname, 'FALHA Psycopg, ERRO operacional durante a atualização'
         except psycopg2.DatabaseError:
             connection.rollback()
-            return False
+            return False, backupname, 'FALHA Psycopg, Erro no banco de dados durante a atualização'
         else:
             connection.commit()
             if not validaSizeTables(cursor):
-                return False
-            PGPASS.unlink()
-            return True
+                return False, backupname, 'ERRO, desigualdade na comparação do tamanho das tabelas'
+        PGPASS.unlink()
+        return True, 'Atualização concluida com SUCESSO!'
 
 
 def testesdeAmbiente():
@@ -305,11 +339,24 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+#======= Linha de Seleção de tarefas do programa ================
+    #Atualização via linha de comando
     if args.atualizar:
-        atualizacaoTarifa(args.host, args.user, args.port, args.dbname)
+        retorno = atualizacaoTarifa(args.host, args.user, args.port, args.dbname)
+        if not retorno[0]:
+            print(retorno[2])
+            print('Restore de emergencia')
+            res = restore('custom', args.host, args.user, args.dbname, args.port, retorno[1], 'config_tarifa')
+            if not res:
+                print('FALHA restore emergencial')# IMPORTANTE LOG ***
+                exit()
+            print('Realizado restore emergencial')
+
+    #Testes via linha de comando
     elif args.teste:
         testesdeAmbiente()
-    # elif OS == 'Windows':
+
+    #Opções em menu shell
     else:
         print("\n==== ESCOLHA A TAREFA ===========")
         _a = input("    1 <---- Preparar Nova Tarifa\n    2 <---- Preparar Agendamento\n    3 <---- Testar\n----> ")
@@ -317,10 +364,12 @@ if __name__ == "__main__":
         if _a == '1':
             print("\n==== PREPARAR NOVA TARIFA ========")
             _b = input("    1 <---- Acesso Padrão\n    2 <---- Digitar\n    3 <---- Apenas Senha\n----> ")
-            preparaTarifaNova(_b)
+            retorno = preparaTarifaNova(_b)
+            input(retorno[1])
         elif _a == '2':
             print("\n==== PREPARAR AGENDAMENTO ========")
             _b = input("    1 <---- Acesso Padrão\n    2 <---- Digitar\n    3 <---- Apenas Senha\n----> ")
-            preparaAgendamento(_b)
+            retorno = preparaAgendamento(_b)
+            input[retorno[1]]
         elif _a == '3':
             testesdeAmbiente()

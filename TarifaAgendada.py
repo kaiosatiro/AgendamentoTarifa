@@ -14,7 +14,7 @@ def salvaScript(host, user, port, dbname, password):
         'script': f'''::Esse Script DEVE ser executado dentro da mesma pasta em que está o programa que o gerou.
 {SCRIPTDIR} --atualizar --host {host} --user {user} --port {port} --dbname {dbname}
 ''' ,
-        'nome2': 'ScriptAtualizaTarifaSOLO.bat',
+        'nome2': 'ScriptAtualizaTarifaWINDOWS.bat',
         'script2': f'''::Esse Script PODE ser executado sozinho
 set PGPASSWORD={password}
 set cwd=%~dp0
@@ -122,7 +122,7 @@ def dump(host, user, port, dbname, filename, type, tablename):
     proc = Popen(['pg_dump', '--host', host, '-U', user, '--port', port,
      '--format', type, '--verbose', '--file', str(filename),
       '--table', tablename, dbname],
-       cwd=PGWORKDIR, shell=shl, stdin=PIPE)
+       cwd=PGWORKDIR, shell=False, stdin=PIPE)
     proc.wait()
     return proc.returncode == 0
 
@@ -134,14 +134,14 @@ def restore(tipo, host, user, dbname, port, filename, table):
     if tipo == 'pg_restore':
         proc = Popen(['pg_restore', '--clean', '--host', host, '--port', port, 
         '--username', user, '--dbname', dbname, '--verbose', str(filename)],
-                    cwd=PGWORKDIR, shell=shl, stdin=PIPE)
+                    cwd=PGWORKDIR, shell=False, stdin=PIPE)
         proc.wait()
     elif tipo == 'psql':
         truncate = Popen(['psql', '-U', user, '-d', dbname, '-h', host, '-p', port,'-c', f'TRUNCATE {table}'],
-                    cwd=PGWORKDIR, shell=shl, stdin=PIPE)
+                    cwd=PGWORKDIR, shell=False, stdin=PIPE)
         truncate.wait()
         proc = Popen(['psql', '-U', user, '-d', dbname, '-h', host, '-p', port, '<', str(filename)],
-                    cwd=PGWORKDIR, shell=shl, stdin=PIPE)
+                    cwd=PGWORKDIR, shell=False, stdin=PIPE)
         proc.wait()
     return proc.returncode == 0
 
@@ -264,19 +264,19 @@ def testesdeAmbiente():
     shl = False if OS == 'Linux' else True
     #Testes de Postgres
     try:
-        psql = Popen(['psql', '-V'], cwd=PGWORKDIR, shell=shl)
+        psql = Popen(['psql', '-V'], cwd=PGWORKDIR, shell=False)
         psql.wait()
         psql = psql.returncode == 0#Valida o teste
     except NotADirectoryError:
         psql = False
     try:
-        pg_dump = Popen(['pg_dump', '-V'], cwd=PGWORKDIR, shell=shl)
+        pg_dump = Popen(['pg_dump', '-V'], cwd=PGWORKDIR, shell=False)
         pg_dump.wait()
         pg_dump = pg_dump.returncode == 0#Valida o teste
     except NotADirectoryError:
         pg_dump = False
     try:
-        pg_restore = Popen(['pg_restore', '-V'], cwd=PGWORKDIR, shell=shl)
+        pg_restore = Popen(['pg_restore', '-V'], cwd=PGWORKDIR, shell=False)
         pg_restore.wait()
         pg_restore = pg_restore.returncode == 0#Valida o teste
     except NotADirectoryError:

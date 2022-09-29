@@ -1,6 +1,7 @@
 from subprocess import Popen
 from pathlib import Path, PurePath
 from argparse import ArgumentParser
+from platform import system
 from time import strftime
 from os import system as sys
 import psycopg2
@@ -8,20 +9,6 @@ import psycopg2
 
 #Script a ser executado pelo agendador de tarefas do sistema operacional
 def salvaScript(host, user, port, dbname, password):
-    #Scripts para windows
-    windows = {
-        'nome': 'ScriptAtualizaTarifa.bat',
-        'script': f'''::Esse Script DEVE ser executado dentro da mesma pasta em que está o programa que o gerou.
-{FILEDIR} --atualizar --host {host} --user {user} --port {port} --dbname {dbname}
-''' ,
-        'nome2': 'ScriptAtualizaTarifaWINDOWS.bat',
-        'script2': f'''::Esse Script PODE ser executado sozinho
-set PGPASSWORD={password}
-set cwd=%~dp0
-cd {PGWORKDIR}
-psql -U {user} -d {dbname} -h {host} -p {port} -c "DROP TABLE IF EXISTS tarifa_backup;CREATE TABLE tarifa_backup AS SELECT * FROM config_tarifa;BEGIN TRANSACTION;TRUNCATE config_tarifa;INSERT INTO config_tarifa  SELECT * FROM agendamento_config_tarifa;COMMIT;" >> %cwd%\ScriptAtualizaTarifaLOG.log 2>&1
-''' 
-    }
     #Scripts para Linux
     linux = {
         'nome': 'ScriptAtualizaTarifa.sh',
@@ -46,13 +33,12 @@ docker exec -itd $(docker ps | grep db: | cut -d " " -f1) psql -U {user} -d {dbn
     #Fonece as opções de sistema operacional
     while True:
         print("\n===== SALVAR SCRIPT PARA ==========")
-        i = input("    1 <---- LINUX CentOS 7\n    2 <---- LINUX CentOS 5\n    3 <---- WINDOWS\n----> ")
-        if i not in ('1', '2', '3'):
+        i = input("    1 <---- LINUX CentOS 7\n    2 <---- LINUX CentOS 5\n----> ")
+        if i not in ('1', '2'):
             input("Opção inválida!")
             sys('cls')
             continue
-        if i in ('1', '2'):
-            input('No Linux, LEMBRE-SE de executar o CHMOD no script')
+        input('LEMBRE-SE de executar o CHMOD no script')
         break
 
     if i == '1':
@@ -61,12 +47,9 @@ docker exec -itd $(docker ps | grep db: | cut -d " " -f1) psql -U {user} -d {dbn
     elif i == '2':
         nomearq == linux['nomeOS5']
         script == linux['scriptOS5']
-    elif i == '3':
-        nomearq = windows['nome2']
-        script = windows['script2']
 
-    nomearq2 = windows['nome']
-    script2 = windows['script']
+    nomearq2 = linux['nome']
+    script2 = linux['script']
     
     #Grava os scripts
     with open(nomearq, 'w') as arq: arq.write(script)
@@ -112,9 +95,10 @@ def criaTabelaAgendamento(connection, cursor):
         return True, 'OK'
 
 
+
 #Funcoes PG_DUMP
 def dump(host, user, port, dbname, filename, type, tablename):
-    proc = Popen(['C:/Program Files (x86)/PostgreSQL/8.4/bin/pg_dump.exe',
+    proc = Popen(['pg_dump',
                     '--host', host, '-U', user, '--port', port,
                     '--format', type, '--verbose', '--file', str(filename),
                     '--table', tablename, dbname])
@@ -125,17 +109,17 @@ def dump(host, user, port, dbname, filename, type, tablename):
 #Funcoes de RESTORE
 def restore(tipo, host, user, dbname, port, filename, table):
     if tipo == 'pg_restore':
-        proc = Popen(['C:/Program Files (x86)/PostgreSQL/8.4/bin/pg_restore.exe',
+        proc = Popen(['pg_restore',
                         '--clean', '--host', host, '--port', port, 
                         '--username', user, '--dbname', dbname, 
                         '--verbose', str(filename)])
         proc.wait()
     elif tipo == 'psql':
-        truncate = Popen(['C:/Program Files (x86)/PostgreSQL/8.4/bin/psql.exe',
+        truncate = Popen(['psql',
                             '-U', user, '-d', dbname, '-h', host,
                             '-p', port,'-c', f'TRUNCATE {table}'])
         truncate.wait()
-        proc = Popen(['C:/Program Files (x86)/PostgreSQL/8.4/bin/psql.exe',
+        proc = Popen(['psql',
                         '-U', user, '-d', dbname, '-h', host,
                         '-p', port, '<', str(filename)])
         proc.wait()
@@ -159,9 +143,9 @@ def preparaTarifaNova(opcao):
         else: password = input('PASSWORD: ')
     
     #Escreve o arquivo pgpass
-
     with PGPASS.open(mode='w') as arq:
         arq.write(f'\n{host}:{port}:*:{user}:{password}')# IMPORTANTE LOG ***
+        Popen(['chmod', '0600', PGPASS])# IMPORTANTE LOG ***
     
     #Cria a tabela agendamento e verifica a igualdade dos tamanhos
     with psycopg2.connect(f'host={host} dbname={dbname} user={user}') as connection:
@@ -197,6 +181,7 @@ def preparaAgendamento(opcao):
     #Escreve o arquivo pgpass
     with PGPASS.open(mode='w') as arq: 
         arq.write(f'\n{host}:{port}:*:{user}:{password}')# IMPORTANTE LOG ***
+        Popen(['chmod', '0600', PGPASS])# IMPORTANTE LOG  ***
 
     #Backup de segurança
     backupname = PurePath(f"{CWD}/BACKUP_SEGURANCA_TARIFA_{DATE}")
@@ -232,7 +217,7 @@ def preparaAgendamento(opcao):
 def atualizacaoTarifa(host, user, port, dbname):
     #Backup de segurança e checagem da arquivo de backup
     backupname = PurePath(f"{CWD}/BACKUP_SEGURANCA_TARIFA_{DATE}")
-    retorno = dump(host, user, port, dbname, backupname, 'custom', 'public.config_tarifa') # IMPORTANTE LOG ***
+    retorno = dump(host, user, port, dbname, backupname, 'custom', 'public.config_tarifa')# IMPORTANTE LOG ***
     if not retorno:
         return False, 'FALHA no dump do backup'
     if not Path(backupname).is_file():
@@ -265,19 +250,19 @@ def atualizacaoTarifa(host, user, port, dbname):
 def testesdeAmbiente():
     #Testes de Postgres
     try:
-        psql = Popen(['C:/Program Files (x86)/PostgreSQL/8.4/bin/psql.exe', '-V'])
+        psql = Popen(['psql', '-V'])
         psql.wait()
         psql = psql.returncode == 0 #Valida o teste
     except NotADirectoryError:
         psql = False
     try:
-        pg_dump = Popen(['C:/Program Files (x86)/PostgreSQL/8.4/bin/pg_dump.exe', '-V'])
+        pg_dump = Popen(['pg_dump', '-V'])
         pg_dump.wait()
         pg_dump = pg_dump.returncode == 0 #Valida o teste
     except NotADirectoryError:
         pg_dump = False
     try:
-        pg_restore = Popen(['C:/Program Files (x86)/PostgreSQL/8.4/bin/pg_restore.exe', '-V'])
+        pg_restore = Popen(['pg_restore', '-V'])
         pg_restore.wait()
         pg_restore = pg_restore.returncode == 0 #Valida o teste
     except NotADirectoryError:
@@ -286,15 +271,15 @@ def testesdeAmbiente():
     try:
         with PGPASS.open(mode='w') as arq: 
             arq.write(f'\n::*::')
-            pgpass =  Path(PGPASS).is_file() #Valida o teste
+            pgpass =  Path(PGPASS).is_file()#Valida o teste
         PGPASS.unlink()
     except PermissionError:
-        pgpass = False #Valida o teste
+        pgpass = False#Valida o teste
     
     ok = '[ OK ]'
-    errgrav = '[ ERRO ] > Erro na gravação do arquivo. Execute como Admnistrador'
-    errpsql = "[ ERRO ] > binario não encontrado na pasta 'C:/Program Files (x86)/PostgreSQL/8.4/bin/'"
-
+    errgrav = '[ ERRO ] > Erro na gravação do arquivo. Verifique a permissão de execução (chmod)'
+    errpsql = "[ ERRO ] > binario não encontrado "
+    
     print('\n=========== TESTES ================')
     print(f'Teste -- PSQL ------------ {ok if psql else errpsql}')
     print(f'Teste -- PG_DUMP --------- {ok if pg_dump else errpsql}')
@@ -307,9 +292,9 @@ if __name__ == "__main__":
 
     CWD = Path.cwd()
     DATE = strftime("%Y-%m-%d")
-    PGPASS = Path.home()/'AppData'/'Roaming'/'postgresql'/'pgpass.conf'
+    PGPASS = Path.home()/'.pgpass'
     FILEDIR = Path( __file__ ).absolute()
-    
+
 # Parseamento de Argumentos da linha de comando
     parser = ArgumentParser(description='trigger')
     group = parser.add_mutually_exclusive_group(required=False)
@@ -342,16 +327,10 @@ if __name__ == "__main__":
 
     #Opções em menu shell
     else:
-        psqlWindir = Path(f"C:/Program Files (x86)/PostgreSQL/8.4/bin/")
-        if not psqlWindir.is_dir():
-            print('Diretorio do PostgreSQL não encontrado')
-            input('C:/Program Files (x86)/PostgreSQL/8.4/bin/')
-        PGWORKDIR = PurePath(psqlWindir)
-
-        SCRIPTDIR = Path('C:\WPSBrasil\agendamento_tarifa')
-        if not SCRIPTDIR.is_dir():
+        scriptdir = Path('/WPSBrasil/agendamento_tarifa/')
+        if not scriptdir.is_dir():
             print('Programa aberto no diretório errado:')
-            input('C:/WPSBrasil/agendamento_tarifa/')
+            input('/WPSBrasil/agendamento_tarifa/')
 
         print('Realize os testes primeiro')
         while True:

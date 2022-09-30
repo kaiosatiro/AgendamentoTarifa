@@ -3,6 +3,7 @@ from pathlib import Path, PurePath
 from argparse import ArgumentParser
 from time import strftime
 from os import system as sys
+from glob import glob
 import psycopg2
 
 
@@ -114,10 +115,8 @@ def criaTabelaAgendamento(connection, cursor):
 
 #Funcoes PG_DUMP
 def dump(host, user, port, dbname, filename, type, tablename):
-    proc = Popen(['C:/Program Files (x86)/PostgreSQL/8.4/bin/pg_dump.exe',
-                    '--host', host, '-U', user, '--port', port,
-                    '--format', type, '--verbose', '--file', str(filename),
-                    '--table', tablename, dbname])
+    proc = Popen([PGWORKDIR/'pg_dump.exe', '--host', host, '-U', user, '--port', port,
+            '--format', type, '--verbose', '--file', str(filename),  '--table', tablename, dbname])
     proc.wait()
     return proc.returncode == 0
 
@@ -125,18 +124,14 @@ def dump(host, user, port, dbname, filename, type, tablename):
 #Funcoes de RESTORE
 def restore(tipo, host, user, dbname, port, filename, table):
     if tipo == 'pg_restore':
-        proc = Popen(['C:/Program Files (x86)/PostgreSQL/8.4/bin/pg_restore.exe',
-                        '--clean', '--host', host, '--port', port, 
-                        '--username', user, '--dbname', dbname, 
-                        '--verbose', str(filename)])
+        proc = Popen([PGWORKDIR/'pg_restore.exe', '--clean', '--host', host, '--port', port, 
+                    '--username', user, '--dbname', dbname, '--verbose', str(filename)])
         proc.wait()
     elif tipo == 'psql':
-        truncate = Popen(['C:/Program Files (x86)/PostgreSQL/8.4/bin/psql.exe',
-                            '-U', user, '-d', dbname, '-h', host,
+        truncate = Popen([PGWORKDIR/'psql.exe', '-U', user, '-d', dbname, '-h', host,
                             '-p', port,'-c', f'TRUNCATE {table}'])
         truncate.wait()
-        proc = Popen(['C:/Program Files (x86)/PostgreSQL/8.4/bin/psql.exe',
-                        '-U', user, '-d', dbname, '-h', host,
+        proc = Popen([PGWORKDIR/'psql.exe', '-U', user, '-d', dbname, '-h', host,
                         '-p', port, '<', str(filename)])
         proc.wait()
     return proc.returncode == 0
@@ -265,19 +260,19 @@ def atualizacaoTarifa(host, user, port, dbname):
 def testesdeAmbiente():
     #Testes de Postgres
     try:
-        psql = Popen(['C:/Program Files (x86)/PostgreSQL/8.4/bin/psql.exe', '-V'])
+        psql = Popen([PGWORKDIR/'psql.exe', '-V'])
         psql.wait()
         psql = psql.returncode == 0 #Valida o teste
     except NotADirectoryError:
         psql = False
     try:
-        pg_dump = Popen(['C:/Program Files (x86)/PostgreSQL/8.4/bin/pg_dump.exe', '-V'])
+        pg_dump = Popen([PGWORKDIR/'pg_dump.exe', '-V'])
         pg_dump.wait()
         pg_dump = pg_dump.returncode == 0 #Valida o teste
     except NotADirectoryError:
         pg_dump = False
     try:
-        pg_restore = Popen(['C:/Program Files (x86)/PostgreSQL/8.4/bin/pg_restore.exe', '-V'])
+        pg_restore = Popen([PGWORKDIR/'pg_restore.exe', '-V'])
         pg_restore.wait()
         pg_restore = pg_restore.returncode == 0 #Valida o teste
     except NotADirectoryError:
@@ -307,9 +302,9 @@ if __name__ == "__main__":
 
     CWD = Path.cwd()
     DATE = strftime("%Y-%m-%d")
-    PGPASS = Path.home()/'AppData'/'Roaming'/'postgresql'/'pgpass.conf'
     FILEDIR = Path( __file__ ).absolute()
-    
+    PGPASS = Path.home()/'AppData'/'Roaming'/'postgresql'/'pgpass.conf'
+
 # Parseamento de Argumentos da linha de comando
     parser = ArgumentParser(description='trigger')
     group = parser.add_mutually_exclusive_group(required=False)
@@ -342,18 +337,24 @@ if __name__ == "__main__":
 
     #Opções em menu shell
     else:
-        psqlWindir = Path(f"C:/Program Files (x86)/PostgreSQL/8.4/bin/")
-        if not psqlWindir.is_dir():
-            print('Diretorio do PostgreSQL não encontrado')
-            input('C:/Program Files (x86)/PostgreSQL/8.4/bin/')
-        PGWORKDIR = PurePath(psqlWindir)
+        #Pesquisa do diretório do Postgres
+        try:
+            dir = r'C:\*Program*\PostgreSQL\???\bin\psql.*'
+            psqldir = glob(dir, recursive=True)[0]
+            pgworkdir = Path(psqldir).parent
+        except IndexError:
+            print('\nDiretorio do PostgreSQL não encontrado')
+            print('Indique o diretório do binário psql.exe:')
+            print('Exemplo: C:/Program Files (x86)/PostgreSQL/8.4/bin')
+            psqldir = input('>')
+            pgworkdir = Path(psqldir)
+            sys('cls')
+        #Diretorio dos binários do Postgres
+        PGWORKDIR = PurePath(pgworkdir)
 
-        SCRIPTDIR = Path('C:\WPSBrasil\agendamento_tarifa')
-        if not SCRIPTDIR.is_dir():
-            print('Programa aberto no diretório errado:')
-            input('C:/WPSBrasil/agendamento_tarifa/')
-
-        print('Realize os testes primeiro')
+        print('\n*** Realize os testes primeiro ***')
+        print('** Recomenda-se que o programa seja executado do diretório:')
+        print('C:/WPSBrasil/agendamento_tarifa/')
         while True:
             print("\n==== ESCOLHA A TAREFA ===========")
             _a = input("    1 <---- Preparar Nova Tarifa\n    2 <---- Preparar Agendamento\n    3 <---- Testes!\n    Q <---- Sair...\n----> ").upper()

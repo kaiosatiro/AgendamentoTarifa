@@ -1,7 +1,7 @@
+#!/usr/bin/python3
 from subprocess import Popen
 from pathlib import Path, PurePath
 from argparse import ArgumentParser
-from platform import system
 from time import strftime
 from os import system as sys
 import psycopg2
@@ -14,7 +14,7 @@ def salvaScript(host, user, port, dbname, password):
         'nome': 'ScriptAtualizaTarifa.sh',
         'script': f'''#!/bin/sh -xe
 #Esse Script DEVE ser executado dentro da mesma pasta em que está o programa que o gerou.
-/WPSBrasil/agendamento_tarifa/TarifAgendada --atualizar --host {host} --user {user} --port {port} --dbname {dbname}
+{FILEDIR} --atualizar --host {host} --user {user} --port {port} --dbname {dbname}
 ''',
         'nomeOS5': 'ScriptAtualizaTarifaCentOS5.sh',
         'scriptOS5': f'''#!/bin/sh -xe
@@ -36,7 +36,7 @@ docker exec -itd $(docker ps | grep db: | cut -d " " -f1) psql -U {user} -d {dbn
         i = input("    1 <---- LINUX CentOS 7\n    2 <---- LINUX CentOS 5\n----> ")
         if i not in ('1', '2'):
             input("Opção inválida!")
-            sys('cls')
+            sys('clear')
             continue
         input('LEMBRE-SE de executar o CHMOD no script')
         break
@@ -326,13 +326,10 @@ if __name__ == "__main__":
         testesdeAmbiente()
 
     #Opções em menu shell
-    else:
-        scriptdir = Path('/WPSBrasil/agendamento_tarifa/')
-        if not scriptdir.is_dir():
-            print('Programa aberto no diretório errado:')
-            input('/WPSBrasil/agendamento_tarifa/')
-
-        print('Realize os testes primeiro')
+    else:      
+        print('\n*** Realize os testes primeiro ***')
+        print('** Recomenda-se que o programa seja executado do diretório:')
+        print('/WPSBrasil/agendamento_tarifa')
         while True:
             print("\n==== ESCOLHA A TAREFA ===========")
             _a = input("    1 <---- Preparar Nova Tarifa\n    2 <---- Preparar Agendamento\n    3 <---- Testes!\n    Q <---- Sair...\n----> ").upper()
@@ -352,4 +349,4 @@ if __name__ == "__main__":
                 testesdeAmbiente()
             elif _a == 'Q':
                 break
-            sys('cls')
+            sys('clear')

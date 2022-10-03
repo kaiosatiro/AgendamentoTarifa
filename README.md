@@ -3,6 +3,10 @@
 <p align="center">
 <img src="https://img.shields.io/github/v/release/kaiosatiro/AgendamentoTarifa?label=version"/>
 </p>
+<p align="center">
+<a href="https://www.codefactor.io/repository/github/kaiosatiro/agendamentotarifa">
+<img src="https://www.codefactor.io/repository/github/kaiosatiro/agendamentotarifa/badge" alt="CodeFactor" /></a>
+</p>
 
 
 # <h2>Status</h2>
@@ -29,7 +33,7 @@ O agendamento da tarefa de execução é feita no sistema operacional, apontando
 Em caso de alguma falha durante o processo o programa desfará o processo (ROLLBACK) e retornará á configuração anterior.
 
 # <h2>Uso</h2>
-
+<b>*** Indico o programa ser salvo e executado na pasta "Raiz"\WPSBrasil\agendamento_tarifa ***</b>
 1. Na garagem a ser agendado a tarifa, exporte os dados do tarifador e o carregue no computador que irá realizar as mudanças. Após configurado os futuros valores, executar o programa e escolher a opção <1>.
    <br> ![image](https://user-images.githubusercontent.com/87156189/192160425-f7d50660-bba6-4aee-b05e-8ccf3d52cee0.png)</br>
    O programa irá solicitar os dados de acesso ao servidor em três opções de detalhamento. 			

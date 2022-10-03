@@ -2,7 +2,6 @@ from subprocess import Popen
 from pathlib import Path, PurePath
 from argparse import ArgumentParser
 from time import strftime
-from os import system as sys
 from glob import glob
 import psycopg2
 
@@ -50,7 +49,6 @@ docker exec -itd $(docker ps | grep db: | cut -d " " -f1) psql -U {user} -d {dbn
         i = input("    1 <---- LINUX CentOS 7\n    2 <---- LINUX CentOS 5\n    3 <---- WINDOWS\n----> ")
         if i not in ('1', '2', '3'):
             input("Opção inválida!")
-            sys('cls')
             continue
         if i in ('1', '2'):
             input('No Linux, LEMBRE-SE de executar o CHMOD no script')
@@ -116,7 +114,7 @@ def criaTabelaAgendamento(connection, cursor):
 #Funcoes PG_DUMP
 def dump(host, user, port, dbname, filename, type, tablename):
     proc = Popen([PGWORKDIR/'pg_dump.exe', '--host', host, '-U', user, '--port', port,
-            '--format', type, '--verbose', '--file', str(filename),  '--table', tablename, dbname])
+            '--format', type, '--verbose', '--file', str(filename), '--table', tablename, dbname])
     proc.wait()
     return proc.returncode == 0
 
@@ -343,18 +341,19 @@ if __name__ == "__main__":
             psqldir = glob(dir, recursive=True)[0]
             pgworkdir = Path(psqldir).parent
         except IndexError:
-            print('\nDiretorio do PostgreSQL não encontrado')
+            print()
+            print('Diretorio do PostgreSQL não encontrado')
             print('Indique o diretório do binário psql.exe:')
             print('Exemplo: C:/Program Files (x86)/PostgreSQL/8.4/bin')
             psqldir = input('>')
             pgworkdir = Path(psqldir)
-            sys('cls')
         #Diretorio dos binários do Postgres
         PGWORKDIR = PurePath(pgworkdir)
-
-        print('\n*** Realize os testes primeiro ***')
+        print()
+        print('*** Realize os testes primeiro ***')
         print('** Recomenda-se que o programa seja executado do diretório:')
         print('C:/WPSBrasil/agendamento_tarifa/')
+        print()
         while True:
             print("\n==== ESCOLHA A TAREFA ===========")
             _a = input("    1 <---- Preparar Nova Tarifa\n    2 <---- Preparar Agendamento\n    3 <---- Testes!\n    Q <---- Sair...\n----> ").upper()
@@ -374,4 +373,3 @@ if __name__ == "__main__":
                 testesdeAmbiente()
             elif _a == 'Q':
                 break
-            sys('cls')

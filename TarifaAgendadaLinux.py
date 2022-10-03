@@ -3,7 +3,6 @@ from subprocess import Popen
 from pathlib import Path, PurePath
 from argparse import ArgumentParser
 from time import strftime
-from os import system as sys
 import psycopg2
 
 
@@ -36,7 +35,6 @@ docker exec -itd $(docker ps | grep db: | cut -d " " -f1) psql -U {user} -d {dbn
         i = input("    1 <---- LINUX CentOS 7\n    2 <---- LINUX CentOS 5\n----> ")
         if i not in ('1', '2'):
             input("Opção inválida!")
-            sys('clear')
             continue
         input('LEMBRE-SE de executar o CHMOD no script')
         break
@@ -327,9 +325,11 @@ if __name__ == "__main__":
 
     #Opções em menu shell
     else:      
-        print('\n*** Realize os testes primeiro ***')
+        print()
+        print('*** Realize os testes primeiro ***')
         print('** Recomenda-se que o programa seja executado do diretório:')
         print('/WPSBrasil/agendamento_tarifa')
+        print()
         while True:
             print("\n==== ESCOLHA A TAREFA ===========")
             _a = input("    1 <---- Preparar Nova Tarifa\n    2 <---- Preparar Agendamento\n    3 <---- Testes!\n    Q <---- Sair...\n----> ").upper()
@@ -349,4 +349,3 @@ if __name__ == "__main__":
                 testesdeAmbiente()
             elif _a == 'Q':
                 break
-            sys('clear')

@@ -8,6 +8,7 @@ import psycopg2
 
 #Script a ser executado pelo agendador de tarefas do sistema operacional
 def salvaScript(host, user, port, dbname, password):
+    query = '"DROP TABLE IF EXISTS tarifa_backup;CREATE TABLE tarifa_backup AS SELECT * FROM config_tarifa;BEGIN TRANSACTION;TRUNCATE config_tarifa;INSERT INTO config_tarifa  SELECT * FROM agendamento_config_tarifa;COMMIT;"'
     #Scripts para windows
     windows = {
         'nome': 'ScriptAtualizaTarifa.bat',
@@ -19,7 +20,7 @@ def salvaScript(host, user, port, dbname, password):
 set PGPASSWORD={password}
 set cwd=%~dp0
 cd {PGWORKDIR}
-psql -U {user} -d {dbname} -h {host} -p {port} -c "DROP TABLE IF EXISTS tarifa_backup;CREATE TABLE tarifa_backup AS SELECT * FROM config_tarifa;BEGIN TRANSACTION;TRUNCATE config_tarifa;INSERT INTO config_tarifa  SELECT * FROM agendamento_config_tarifa;COMMIT;" >> %cwd%\ScriptAtualizaTarifaLOG.log 2>&1
+psql -U {user} -d {dbname} -h {host} -p {port} -c {query} >> %cwd%\ScriptAtualizaTarifaLOG.log 2>&1
 ''' 
     }
     #Scripts para Linux
@@ -33,13 +34,13 @@ psql -U {user} -d {dbname} -h {host} -p {port} -c "DROP TABLE IF EXISTS tarifa_b
         'scriptOS5': f'''#!/bin/sh -xe
 #Esse Script PODE ser executado sozinho
 export PGPASSWORD={password}
-psql -U {user} -d {dbname} -h {host} -p {port} -c "DROP TABLE IF EXISTS tarifa_backup;CREATE TABLE tarifa_backup AS SELECT * FROM config_tarifa;BEGIN TRANSACTION;TRUNCATE config_tarifa;INSERT INTO config_tarifa  SELECT * FROM agendamento_config_tarifa;COMMIT;" >> /WPSBrasil/agendamento_tarifa/ScriptAtualizaTarifaLOG.log 2>&1
+psql -U {user} -d {dbname} -h {host} -p {port} -c {query} >> /WPSBrasil/agendamento_tarifa/ScriptAtualizaTarifaLOG.log 2>&1
 ''',
         'nomeOS7': 'ScriptAtualizaTarifaCentOS7.sh',
         'scriptOS7': f'''#!/bin/sh -xe
 #Esse Script PODE ser executado sozinho
 export PGPASSWORD={password}
-docker exec -itd $(docker ps | grep db: | cut -d " " -f1) psql -U {user} -d {dbname} -h {host} -p {port} -c "DROP TABLE IF EXISTS tarifa_backup;CREATE TABLE tarifa_backup AS SELECT * FROM config_tarifa;BEGIN TRANSACTION;TRUNCATE config_tarifa;INSERT INTO config_tarifa  SELECT * FROM agendamento_config_tarifa;COMMIT;" >> /WPSBrasil/agendamento_tarifa/ScriptAtualizaTarifaLOG.log 2>&1
+docker exec -itd $(docker ps | grep db: | cut -d " " -f1) psql -U {user} -d {dbname} -h {host} -p {port} -c {query} >> /WPSBrasil/agendamento_tarifa/ScriptAtualizaTarifaLOG.log 2>&1
 ''' 
     }
 
@@ -279,7 +280,7 @@ def testesdeAmbiente():
     try:
         with PGPASS.open(mode='w') as arq: 
             arq.write(f'\n::*::')
-            pgpass =  Path(PGPASS).is_file() #Valida o teste
+            pgpass = Path(PGPASS).is_file() #Valida o teste
         PGPASS.unlink()
     except PermissionError:
         pgpass = False #Valida o teste

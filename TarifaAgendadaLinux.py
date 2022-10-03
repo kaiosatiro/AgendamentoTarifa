@@ -8,6 +8,7 @@ import psycopg2
 
 #Script a ser executado pelo agendador de tarefas do sistema operacional
 def salvaScript(host, user, port, dbname, password):
+    query = '"DROP TABLE IF EXISTS tarifa_backup;CREATE TABLE tarifa_backup AS SELECT * FROM config_tarifa;BEGIN TRANSACTION;TRUNCATE config_tarifa;INSERT INTO config_tarifa  SELECT * FROM agendamento_config_tarifa;COMMIT;"'
     #Scripts para Linux
     linux = {
         'nome': 'ScriptAtualizaTarifa.sh',
@@ -19,13 +20,13 @@ def salvaScript(host, user, port, dbname, password):
         'scriptOS5': f'''#!/bin/sh -xe
 #Esse Script PODE ser executado sozinho
 export PGPASSWORD={password}
-psql -U {user} -d {dbname} -h {host} -p {port} -c "DROP TABLE IF EXISTS tarifa_backup;CREATE TABLE tarifa_backup AS SELECT * FROM config_tarifa;BEGIN TRANSACTION;TRUNCATE config_tarifa;INSERT INTO config_tarifa  SELECT * FROM agendamento_config_tarifa;COMMIT;" >> /WPSBrasil/agendamento_tarifa/ScriptAtualizaTarifaLOG.log 2>&1
+psql -U {user} -d {dbname} -h {host} -p {port} -c {query} >> /WPSBrasil/agendamento_tarifa/ScriptAtualizaTarifaLOG.log 2>&1
 ''',
         'nomeOS7': 'ScriptAtualizaTarifaCentOS7.sh',
         'scriptOS7': f'''#!/bin/sh -xe
 #Esse Script PODE ser executado sozinho
 export PGPASSWORD={password}
-docker exec -itd $(docker ps | grep db: | cut -d " " -f1) psql -U {user} -d {dbname} -h {host} -p {port} -c "DROP TABLE IF EXISTS tarifa_backup;CREATE TABLE tarifa_backup AS SELECT * FROM config_tarifa;BEGIN TRANSACTION;TRUNCATE config_tarifa;INSERT INTO config_tarifa  SELECT * FROM agendamento_config_tarifa;COMMIT;" >> /WPSBrasil/agendamento_tarifa/ScriptAtualizaTarifaLOG.log 2>&1
+docker exec -itd $(docker ps | grep db: | cut -d " " -f1) psql -U {user} -d {dbname} -h {host} -p {port} -c {query} >> /WPSBrasil/agendamento_tarifa/ScriptAtualizaTarifaLOG.log 2>&1
 ''' 
     }
 
@@ -96,7 +97,7 @@ def criaTabelaAgendamento(connection, cursor):
 
 #Funcoes PG_DUMP
 def dump(host, user, port, dbname, filename, type, tablename):
-    proc = Popen(['pg_dump',
+    proc = Popen(['/bin/pg_dump',
                     '--host', host, '-U', user, '--port', port,
                     '--format', type, '--verbose', '--file', str(filename),
                     '--table', tablename, dbname])
@@ -106,18 +107,18 @@ def dump(host, user, port, dbname, filename, type, tablename):
 
 #Funcoes de RESTORE
 def restore(tipo, host, user, dbname, port, filename, table):
-    if tipo == 'pg_restore':
+    if tipo == '/bin/pg_restore':
         proc = Popen(['pg_restore',
                         '--clean', '--host', host, '--port', port, 
                         '--username', user, '--dbname', dbname, 
                         '--verbose', str(filename)])
         proc.wait()
     elif tipo == 'psql':
-        truncate = Popen(['psql',
+        truncate = Popen(['/bin/psql',
                             '-U', user, '-d', dbname, '-h', host,
                             '-p', port,'-c', f'TRUNCATE {table}'])
         truncate.wait()
-        proc = Popen(['psql',
+        proc = Popen(['/bin/psql',
                         '-U', user, '-d', dbname, '-h', host,
                         '-p', port, '<', str(filename)])
         proc.wait()
@@ -248,19 +249,19 @@ def atualizacaoTarifa(host, user, port, dbname):
 def testesdeAmbiente():
     #Testes de Postgres
     try:
-        psql = Popen(['psql', '-V'])
+        psql = Popen(['/bin/psql', '-V'])
         psql.wait()
         psql = psql.returncode == 0 #Valida o teste
     except NotADirectoryError:
         psql = False
     try:
-        pg_dump = Popen(['pg_dump', '-V'])
+        pg_dump = Popen(['/bin/pg_dump', '-V'])
         pg_dump.wait()
         pg_dump = pg_dump.returncode == 0 #Valida o teste
     except NotADirectoryError:
         pg_dump = False
     try:
-        pg_restore = Popen(['pg_restore', '-V'])
+        pg_restore = Popen(['/bin/pg_restore', '-V'])
         pg_restore.wait()
         pg_restore = pg_restore.returncode == 0 #Valida o teste
     except NotADirectoryError:

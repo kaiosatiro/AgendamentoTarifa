@@ -11,10 +11,15 @@ def salvaScript(host, user, port, dbname, password):
     query = '"DROP TABLE IF EXISTS tarifa_backup;CREATE TABLE tarifa_backup AS SELECT * FROM config_tarifa;BEGIN TRANSACTION;TRUNCATE config_tarifa;INSERT INTO config_tarifa  SELECT * FROM agendamento_config_tarifa;COMMIT;"'
     #Scripts para Linux
     linux = {
+        'nomeTeste': 'ScriptAtualizaTarifaTESTES.sh',
+        'scriptTeste': f'''#!/bin/sh -xe
+#Esse Script DEVE ser executado dentro da mesma pasta em que está o programa que o gerou.
+/WPSBrasil/agendamento_tarifa/TarifaAgendada --teste
+''',
         'nome': 'ScriptAtualizaTarifa.sh',
         'script': f'''#!/bin/sh -xe
 #Esse Script DEVE ser executado dentro da mesma pasta em que está o programa que o gerou.
-{FILEDIR} --atualizar --host {host} --user {user} --port {port} --dbname {dbname}
+/WPSBrasil/agendamento_tarifa/TarifaAgendada --atualizar --host {host} --user {user} --port {port} --dbname {dbname} >> /WPSBrasil/agendamento_tarifa/ScriptAtualizaTarifaLOG.log 2>&1
 ''',
         'nomeOS5': 'ScriptAtualizaTarifaCentOS5.sh',
         'scriptOS5': f'''#!/bin/sh -xe
@@ -49,10 +54,14 @@ docker exec -itd $(docker ps | grep db: | cut -d " " -f1) psql -U {user} -d {dbn
 
     nomearq2 = linux['nome']
     script2 = linux['script']
+    nomeTeste = linux['nomeTeste']
+    scriptTeste = linux['scriptTeste']
     
     #Grava os scripts
     with open(nomearq, 'w') as arq: arq.write(script)
     with open(nomearq2, 'w') as arq2: arq2.write(script2)
+    with open(nomeTeste, 'w') as arqT: arqT.write(scriptTeste)
+    
     return True
 
 
@@ -89,10 +98,7 @@ def criaTabelaAgendamento(connection, cursor):
         return False, 'Psycopg ERRO Banco de Dados na criação da tabela'
     else:
         connection.commit()
-        if not validaSizeTables(cursor):
-            return False, 'ERRO, desigualdade na comparação do tamanho das tabelas'
         return True, 'OK'
-
 
 
 #Funcoes PG_DUMP
@@ -107,8 +113,8 @@ def dump(host, user, port, dbname, filename, type, tablename):
 
 #Funcoes de RESTORE
 def restore(tipo, host, user, dbname, port, filename, table):
-    if tipo == '/bin/pg_restore':
-        proc = Popen(['pg_restore',
+    if tipo == 'pg_restore':
+        proc = Popen(['/bin/pg_restore',
                         '--clean', '--host', host, '--port', port, 
                         '--username', user, '--dbname', dbname, 
                         '--verbose', str(filename)])
@@ -147,11 +153,14 @@ def preparaTarifaNova(opcao):
         Popen(['chmod', '0600', PGPASS])# IMPORTANTE LOG ***
     
     #Cria a tabela agendamento e verifica a igualdade dos tamanhos
-    with psycopg2.connect(f'host={host} dbname={dbname} user={user}') as connection:
-        cursor = connection.cursor()
-        retorno = criaTabelaAgendamento(connection, cursor)# IMPORTANTE LOG ***
-        if not retorno[0]:
-            return retorno
+    try: 
+        with psycopg2.connect(f'host={host} dbname={dbname} user={user}') as connection:
+            cursor = connection.cursor()
+            retorno = criaTabelaAgendamento(connection, cursor)# IMPORTANTE LOG ***
+            if not retorno[0]:
+                return retorno
+    except psycopg2.OperationalError:
+        return False, 'Erro Operacional, provavel erro de SENHA'
 
     #Realiza o DUMP da tarifa a ser carregada no cliente
     tarifanovaName = PurePath(f"{CWD}/TARIFA_NOVA")
@@ -189,12 +198,15 @@ def preparaAgendamento(opcao):
         return False, 'ERRO no dump do BACKUP'
 
     #Criacao da tabela
-    with psycopg2.connect(f'host={host} dbname={dbname} user={user}') as connection:
-        cursor = connection.cursor()
-        retorno = criaTabelaAgendamento(connection, cursor)
-        if not retorno[0]:
-            return retorno
-
+    try:
+        with psycopg2.connect(f'host={host} dbname={dbname} user={user}') as connection:
+            cursor = connection.cursor()
+            retorno = criaTabelaAgendamento(connection, cursor)
+            if not retorno[0]:
+                return retorno
+    except psycopg2.OperationalError:
+        return False, 'Erro Operacional, provavel erro de Senha'
+        
     #Carrega a nova tarifa na tabela de agendamento
     tarifanovaName = PurePath(f"{CWD}/TARIFA_NOVA")
     retorno = restore('pg_restore', host, user, dbname, port, tarifanovaName, 'agendamento_config_tarifa')# IMPORTANTE LOG ***
@@ -224,26 +236,29 @@ def atualizacaoTarifa(host, user, port, dbname):
 
     #Atualizacao da tarifa
     print('Conectando ao banco para atualizar')
-    with psycopg2.connect(f'host={host} dbname={dbname} user={user}') as connection:
-        cursor = connection.cursor()
-        try:
-            print('Atualizando')
-            cursor.execute("DROP TABLE IF EXISTS tarifa_backup;CREATE TABLE tarifa_backup AS SELECT * FROM config_tarifa;BEGIN TRANSACTION;TRUNCATE config_tarifa;INSERT INTO config_tarifa  SELECT * FROM agendamento_config_tarifa;COMMIT;")
-        except psycopg2.errors.OperationalError:
-            connection.rollback()
-            return False, backupname, 'FALHA Psycopg, ERRO operacional durante a atualização'
-        except psycopg2.DatabaseError:
-            connection.rollback()
-            return False, backupname, 'FALHA Psycopg, Erro no banco de dados durante a atualização'
-        else:
-            connection.commit()
-            if not validaSizeTables(cursor):
-                return False, backupname, 'ERRO, desigualdade na comparação do tamanho das tabelas'
-        print('Concluido')
-        print('Removendo pgpass')
-        PGPASS.unlink()
-        print('Removido')
-        return True, 'Atualização concluida com SUCESSO!'
+    try:
+        with psycopg2.connect(f'host={host} dbname={dbname} user={user}') as connection:
+            cursor = connection.cursor()
+            try:
+                print('Atualizando')
+                cursor.execute("DROP TABLE IF EXISTS tarifa_backup;CREATE TABLE tarifa_backup AS SELECT * FROM config_tarifa;BEGIN TRANSACTION;TRUNCATE config_tarifa;INSERT INTO config_tarifa  SELECT * FROM agendamento_config_tarifa;COMMIT;")
+            except psycopg2.errors.OperationalError:
+                connection.rollback()
+                return False, backupname, 'FALHA Psycopg, ERRO operacional durante a atualização'
+            except psycopg2.DatabaseError:
+                connection.rollback()
+                return False, backupname, 'FALHA Psycopg, Erro no banco de dados durante a atualização'
+            else:
+                connection.commit()
+                if not validaSizeTables(cursor):
+                    return False, backupname, 'ERRO, desigualdade na comparação do tamanho das tabelas'
+            print('Concluido')
+            print('Removendo pgpass')
+            PGPASS.unlink()
+            print('Removido')
+            return True, 'Atualização concluida com SUCESSO!'
+    except psycopg2.OperationalError:
+        return False, 'Erro Operacional, provavel erro de Senha'
 
 
 def testesdeAmbiente():
@@ -292,7 +307,6 @@ if __name__ == "__main__":
     CWD = Path.cwd()
     DATE = strftime("%Y-%m-%d")
     PGPASS = Path.home()/'.pgpass'
-    FILEDIR = Path( __file__ ).absolute()
 
 # Parseamento de Argumentos da linha de comando
     parser = ArgumentParser(description='trigger')
@@ -319,7 +333,10 @@ if __name__ == "__main__":
                 print('FALHA restore emergencial')# IMPORTANTE LOG ***
                 exit()
             print('Realizado restore emergencial')
-
+        else:
+            print('Apagando o arquivo de script')
+            scriptdir = Path('/WPSBrasil/agendamento_tarifa/TarifaAgendada')
+            scriptdir.unlink()
     #Testes via linha de comando
     elif args.teste:
         testesdeAmbiente()
@@ -327,8 +344,8 @@ if __name__ == "__main__":
     #Opções em menu shell
     else:      
         print()
-        print('*** Realize os testes primeiro ***')
-        print('** Recomenda-se que o programa seja executado do diretório:')
+        print('* Realize os testes primeiro *')
+        print('** O programa DEVE ser executado do diretório:')
         print('/WPSBrasil/agendamento_tarifa')
         print()
         while True:

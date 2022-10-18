@@ -6,19 +6,19 @@ from glob import glob
 import psycopg2
 
 
-#Script a ser executado pelo agendador de tarefas do sistema operacional
+# Script a ser executado pelo agendador de tarefas do sistema operacional
 def salvaScript(host, user, port, dbname, password):
     query = '"DROP TABLE IF EXISTS tarifa_backup;CREATE TABLE tarifa_backup AS SELECT * FROM config_tarifa;BEGIN TRANSACTION;TRUNCATE config_tarifa;INSERT INTO config_tarifa  SELECT * FROM agendamento_config_tarifa;COMMIT;"'
-    #Scripts para windows
+    # Scripts para windows
     windows = {
         'nomeTeste': 'ScriptAtualizaTarifaTESTE.bat',
         'scriptTESTE': f'''::Esse Script DEVE ser executado dentro da mesma pasta em que está o programa que o gerou.
-C:/WPSBrasil/agendamento_tarifa/TarifAgendada.exe --teste
+C:/WPSBrasil/agendamento_tarifa/TarifAgendada.exe --teste >> %cwd%\ScriptAtualizaTarifaTESTELOG.log 2>&1
 pause
 ''' ,
         'nome': 'ScriptAtualizaTarifa.bat',
         'script': f'''::Esse Script DEVE ser executado dentro da mesma pasta em que está o programa que o gerou.
-C:/WPSBrasil/agendamento_tarifa/TarifAgendada.exe --atualizar --host {host} --user {user} --port {port} --dbname {dbname} %cwd%\ScriptAtualizaTarifaLOG.log 2>&1
+C:/WPSBrasil/agendamento_tarifa/TarifAgendada.exe --atualizar --host {host} --user {user} --port {port} --dbname {dbname} >> %cwd%\ScriptAtualizaTarifaLOG.log 2>&1
 ''' ,
         'nome2': 'ScriptAtualizaTarifaWINDOWS.bat',
         'script2': f'''::Esse Script PODE ser executado sozinho
@@ -28,7 +28,7 @@ cd {PGWORKDIR}
 psql -U {user} -d {dbname} -h {host} -p {port} -c {query} >> %cwd%\ScriptAtualizaTarifaLOG.log 2>&1
 ''' 
     }
-    #Scripts para Linux
+    # Scripts para Linux
     linux = {
         'nomeOS5': 'ScriptAtualizaTarifaCentOS5.sh',
         'scriptOS5': f'''#!/bin/sh -xe
@@ -44,7 +44,7 @@ docker exec -itd $(docker ps | grep db: | cut -d " " -f1) psql -U {user} -d {dbn
 ''' 
     }
 
-    #Fonece as opções de sistema operacional
+    # Fonece as opções de sistema operacional
     while True:
         print("\n===== SALVAR SCRIPT PARA ==========")
         i = input("    1 <---- LINUX CentOS 7\n    2 <---- LINUX CentOS 5\n    3 <---- WINDOWS\n----> ")
@@ -70,7 +70,7 @@ docker exec -itd $(docker ps | grep db: | cut -d " " -f1) psql -U {user} -d {dbn
     nomeTeste = windows['nomeTeste']
     scriptTeste = windows['scriptTESTE']
 
-    #Grava os scripts
+    # Grava os scripts
     with open(nomearq, 'w') as arq: arq.write(script)
     with open(nomearq2, 'w') as arq2: arq2.write(script2)
     with open(nomeTeste, 'w') as arqT: arqT.write(scriptTeste)
@@ -78,7 +78,7 @@ docker exec -itd $(docker ps | grep db: | cut -d " " -f1) psql -U {user} -d {dbn
     return True
 
 
-#Função que compara os tamanhos das tabelas, como um dispositivo de segurança
+# Função que compara os tamanhos das tabelas, como um dispositivo de segurança
 def validaSizeTables(cursor):
     #SELECT relation, total_size FROM ( SELECT relname AS "relation", pg_size_pretty (pg_total_relation_size (C.oid)) AS "total_size" FROM pg_class C LEFT JOIN pg_namespace N ON (N.oid = C.relnamespace) WHERE nspname NOT IN ('pg_catalog', 'information_schema') AND C.relkind <> 'i' AND nspname !~ '^pg_toast' ) AS tab WHERE relation LIKE '%config_tarifa%' ORDER BY relation
     cursor.execute("""
@@ -114,7 +114,7 @@ def criaTabelaAgendamento(connection, cursor):
         return True, 'OK'
 
 
-#Funcoes PG_DUMP
+# Funcoes PG_DUMP
 def dump(host, user, port, dbname, filename, type, tablename):
     proc = Popen([PGWORKDIR/'pg_dump.exe', '--host', host, '-U', user, '--port', port,
             '--format', type, '--verbose', '--file', str(filename), '--table', tablename, dbname])
@@ -122,7 +122,7 @@ def dump(host, user, port, dbname, filename, type, tablename):
     return proc.returncode == 0
 
 
-#Funcoes de RESTORE
+# Funcoes de RESTORE
 def restore(tipo, host, user, dbname, port, filename, table):
     if tipo == 'pg_restore':
         proc = Popen([PGWORKDIR/'pg_restore.exe', '--clean', '--host', host, '--port', port, 
@@ -138,12 +138,11 @@ def restore(tipo, host, user, dbname, port, filename, table):
     return proc.returncode == 0
 
 
-# TAREFA QUE REALIZA O DUMP DA TARIFA ALTERADA ==========================================
-def preparaTarifaNova(opcao):
-    #Recebe os parametros do Banco
-    if opcao not in ('1', '2', '3'):
+# FUNCAO que coleta os parametros para acessar o banco
+def parametrosBanco(op):
+    if op not in ('1', '2', '3'):
         return False, "Opção inválida!"
-    if opcao == '2':
+    if op == '2':
         host = input('HOST: ')
         user = input('USER: ')
         port = input('PORT: ')
@@ -151,8 +150,64 @@ def preparaTarifaNova(opcao):
         password = input('PASSWORD: ')
     else:
         host, user, port, dbname = 'localhost', 'postgres', '5432', 'parkingplus'
-        if opcao == '1': password = 'postgres'
+        if op == '1': password = 'postgres'
         else: password = input('PASSWORD: ')
+    
+    return host, user, port, dbname, password
+
+
+# TAREFA QUE REALIZA O DUMP DA TARIFA ATUAL ======================================================
+def baixaTarifaAtual(opcao):
+    # Recebe os parametros do Banco
+    parametros = parametrosBanco(opcao)
+    if not parametros:
+        return False, "Opção inválida!"
+    else:
+        host, user, port, dbname, password = parametros
+
+    # Escreve o arquivo pgpass
+    with PGPASS.open(mode='w') as arq:
+        arq.write(f'\n{host}:{port}:*:{user}:{password}') # IMPORTANTE LOG ***
+
+    # Realiza o DUMP da tarifa direto da config_tarifa
+    tarifaAtual = PurePath(f"{CWD}/Tarifa_ATUAL")
+    retorno = dump(host, user, port, dbname, tarifaAtual, 'custom', 'public.config_tarifa') # IMPORTANTE LOG ***
+    PGPASS.unlink()
+    if not retorno:
+        return False, 'ERRO no dump da tabela'
+    return True, 'Concluido'
+
+
+# TAREFA QUE REALIZA O RESTORE DA TARIFA DIRETO NO BANCO ======================================================
+def carregaTarifaDireto(opcao):
+    # Recebe os parametros do Banco
+    parametros = parametrosBanco(opcao)
+    if not parametros:
+        return False, "Opção inválida!"
+    else:
+        host, user, port, dbname, password = parametros
+
+    # Escreve o arquivo pgpass
+    with PGPASS.open(mode='w') as arq:
+        arq.write(f'\n{host}:{port}:*:{user}:{password}') # IMPORTANTE LOG ***
+
+    # Realiza o DUMP da tarifa direto da config_tarifa
+    tarifaAtual = PurePath(f"{CWD}/Tarifa_ATUAL")
+    retorno = restore('pg_restore', host, user, dbname, port, tarifaAtual, 'config_tarifa') # IMPORTANTE LOG ***
+    PGPASS.unlink()
+    if not retorno:
+        return False, 'ERRO no carregamento da tarifa!'   # IMPORTANTE LOG ***
+    return True, 'Concluido'
+ 
+
+# TAREFA QUE REALIZA O DUMP DA TARIFA PARA SER AGENDADA ==========================================
+def preparaTarifaNova(opcao):
+    # Recebe os parametros do Banco
+    parametros = parametrosBanco(opcao)
+    if not parametros:
+        return False, "Opção inválida!"
+    else:
+        host, user, port, dbname, password = parametros
     
     #Escreve o arquivo pgpass
 
@@ -180,18 +235,11 @@ def preparaTarifaNova(opcao):
 # TAREFA QUE PREPARA O AGENDAMENTO DA NOVA TARIFA =======================================
 def preparaAgendamento(opcao):
     #Recebe os parametros do Banco
-    if opcao not in ('1', '2', '3'): 
+    parametros = parametrosBanco(opcao)
+    if not parametros:
         return False, "Opção inválida!"
-    if opcao == '2':
-        host = input('HOST: ')
-        user = input('USER: ')
-        port = input('PORT: ')
-        dbname = input('BANCO: ')
-        password = input('PASSWORD: ')
     else:
-        host, user, port, dbname = 'localhost', 'postgres', '5432', 'parkingplus'
-        if opcao == '1': password = 'postgres'
-        else: password = input('PASSWORD: ')
+        host, user, port, dbname, password = parametros
 
     #Escreve o arquivo pgpass
     with PGPASS.open(mode='w') as arq: 
@@ -288,10 +336,10 @@ def testesdeAmbiente():
         pgpass = False
     #Testes de gravação
     try:
-        with PGPASS.open(mode='w') as arq: 
+        with PGPASSTESTE.open(mode='w') as arq: 
             arq.write(f'\n::*::')
-            pgpass = Path(PGPASS).is_file() #Valida o teste
-        PGPASS.unlink()
+            pgpass = Path(PGPASSTESTE).is_file() #Valida o teste
+        PGPASSTESTE.unlink()
     except PermissionError:
         pgpass = False #Valida o teste
     
@@ -312,6 +360,7 @@ if __name__ == "__main__":
     CWD = Path.cwd()
     DATE = strftime("%Y-%m-%d")
     PGPASS = Path.home()/'AppData'/'Roaming'/'postgresql'/'pgpass.conf'
+    PGPASSTESTE = Path.home()/'AppData'/'Roaming'/'postgresql'/'pgpassteste.conf'
 
 # Parseamento de Argumentos da linha de comando
     parser = ArgumentParser(description='trigger')
@@ -366,23 +415,42 @@ if __name__ == "__main__":
         print('* Realize os testes primeiro *')
         print('** O programa DEVE ser executado do diretório:')
         print('C:/WPSBrasil/agendamento_tarifa/')
-        print()
         while True:
-            print("\n==== ESCOLHA A TAREFA ===========")
-            _a = input("    1 <---- Preparar Nova Tarifa\n    2 <---- Preparar Agendamento\n    3 <---- Testes!\n    Q <---- Sair...\n----> ").upper()
-            if _a not in ('1', '2', '3', 'Q'):
+            _a = input("""
+======= ESCOLHA A TAREFA ===========")
+1 <---- Baixar a tarifa Atual
+2 <---- Carregar tarifa
+---
+3 <---- Baixar tarifa NOVA para agendamento
+4 <---- Preparar Agendamento
+---
+T <---- Testes!
+Q <---- Sair...
+---->"""
+).upper()
+            if _a not in ('1', '2', '3', '4', 'T', 'Q'):
                 input("Opção inválida!")
-            if _a == '1':
-                print("\n==== PREPARAR NOVA TARIFA ========")
+            elif _a == '1': 
+                print("\n======= BAIXAR A TARIFA ATUAL ========")
+                _b = input("    1 <---- Acesso Padrão\n    2 <---- Digitar\n    3 <---- Apenas Senha\n----> ")
+                retorno = baixaTarifaAtual(_b)
+                input(retorno[1])
+            elif _a == '2': 
+                print("\n======= CARREGAR TARIFA ========")
+                _b = input("    1 <---- Acesso Padrão\n    2 <---- Digitar\n    3 <---- Apenas Senha\n----> ")
+                retorno = carregaTarifaDireto(_b)
+                input(retorno[1])
+            elif _a == '3':
+                print("\n======= BAIXAR NOVA TARIFA A SER AGENDADA ========")
                 _b = input("    1 <---- Acesso Padrão\n    2 <---- Digitar\n    3 <---- Apenas Senha\n----> ")
                 retorno = preparaTarifaNova(_b)
                 input(retorno[1])
-            elif _a == '2':
-                print("\n==== PREPARAR AGENDAMENTO ========")
+            elif _a == '4':
+                print("\n======= PREPARAR AGENDAMENTO ========")
                 _b = input("    1 <---- Acesso Padrão\n    2 <---- Digitar\n    3 <---- Apenas Senha\n----> ")
                 retorno = preparaAgendamento(_b)
                 input(retorno[1])
-            elif _a == '3':
+            elif _a == 'T':
                 testesdeAmbiente()
             elif _a == 'Q':
                 break

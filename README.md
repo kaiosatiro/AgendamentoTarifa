@@ -1,4 +1,4 @@
-<h1 align="center"> Agendador de Tarifas para o sistema ParkingPlus </h1>
+<h1 align="center"> Agendador de Tarifas para o sistema *** </h1>
 
 <p align="center">
 <img src="https://img.shields.io/github/v/release/kaiosatiro/AgendamentoTarifa?label=version"/>
@@ -26,14 +26,14 @@
 
 # <h2>Descrição</h2>
 
-Programa para automatizar o agendamento de mudança de tarifa no sistema parkingplus da WPS.
+Programa para automatizar o agendamento de mudança de tarifa no sistema ***
 
 Foi pensado de forma a programar uma nova tarifa, de maneira SEGURA, no banco.
 O agendamento da tarefa de execução é feita no sistema operacional, apontando o script gerado pelo programa.
 Em caso de alguma falha durante o processo o programa desfará o processo (ROLLBACK) e retornará á configuração anterior.
 
 # <h2>Uso</h2>
-<b>*** Indico o programa ser salvo e executado na pasta "Raiz"\WPSBrasil\agendamento_tarifa ***</b>
+<b>*** Indico o programa ser salvo e executado na pasta "Raiz"\***\agendamento_tarifa ***</b>
 1. Na garagem a ser agendado a tarifa, exporte os dados do tarifador e o carregue no computador que irá realizar as mudanças. Após configurado os futuros valores, executar o programa e escolher a opção <1>.
    <br> ![image](https://user-images.githubusercontent.com/87156189/192160425-f7d50660-bba6-4aee-b05e-8ccf3d52cee0.png)</br>
    O programa irá solicitar os dados de acesso ao servidor em três opções de detalhamento. 			
@@ -102,28 +102,3 @@ Em caso de alguma falha durante o processo o programa desfará o processo (ROLLB
 <p align="left">
 <img src="https://camo.githubusercontent.com/281c069a2703e948b536500b9fd808cb4fb2496b3b66741db4013a2c89e91986/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f506f737467726553514c2d3331363139323f7374796c653d666f722d7468652d6261646765266c6f676f3d706f737467726573716c266c6f676f436f6c6f723d7768697465"/>
 </p>
-
-
-# <h2>Licença</h2>
-
-MIT License
-
-Copyright (c) [year] [fullname]
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.

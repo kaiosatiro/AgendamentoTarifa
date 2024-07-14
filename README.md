@@ -8,9 +8,6 @@
 <img src="https://www.codefactor.io/repository/github/kaiosatiro/agendamentotarifa/badge" alt="CodeFactor" /></a>
 </p>
 
-
-# <h2>Status</h2>
-
 # <h2>Índice </h2>
 
 * [Descrição](#descrição)

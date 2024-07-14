@@ -11,12 +11,6 @@
 
 # <h2>Status</h2>
 
-<h4 align="center"> 
-    :construction: Em melhoria e desenvolvendo mais recursos :construction:
-</h4>
-
-
-
 # <h2>Índice </h2>
 
 * [Descrição](#descrição)
